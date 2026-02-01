@@ -3843,25 +3843,92 @@ async function wsModalPrimary() {
   document.addEventListener('DOMContentLoaded', waitForState);
 })();
 </script>
-<script src="/assets/js/dynamic-dashboard.patch.js">
-<div class="mt-8">
+
+
+<!-- ================== DYNAMIC SECTIONS (BUILT-IN) ================== -->
+<div class="mt-10">
   <div class="flex justify-between items-center mb-3">
     <h2 class="text-xl font-bold">Dynamic Sections</h2>
     <div class="flex gap-2">
-      <button onclick="addDynamicSection('Bug Tracker')" class="px-3 py-2 bg-red-600 text-white rounded-lg text-sm">
-        + Bug Tracker
-      </button>
-      <button onclick="addDynamicSection('User Stories')" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">
-        + User Stories
-      </button>
-      <button onclick="addDynamicSection('Custom')" class="px-3 py-2 bg-green-600 text-white rounded-lg text-sm">
-        + Custom
-      </button>
+      <button onclick="addDynamicSection('Bug Tracker')" class="px-3 py-2 bg-red-600 text-white rounded-lg text-sm">+ Bug Tracker</button>
+      <button onclick="addDynamicSection('User Stories')" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">+ User Stories</button>
+      <button onclick="addDynamicSection('Custom')" class="px-3 py-2 bg-green-600 text-white rounded-lg text-sm">+ Custom</button>
     </div>
   </div>
-</script>
   <div id="dynamic-section-host"></div>
 </div>
+
+<script>
+/* ===== FULLY INTEGRATED DYNAMIC ENGINE ===== */
+(function(){
+  function ws(){ return window.wsActive || window.__WS__; }
+  function dyn(){
+    const w=ws(); if(!w) return null;
+    w.state=w.state||{}; w.state.dynamic=w.state.dynamic||{sections:{}};
+    return w.state.dynamic;
+  }
+  function save(){ if(window.wsSaveCurrentWorkspace) wsSaveCurrentWorkspace(); }
+  function me(){ return window.twMe||{role:'viewer',userId:'unknown'}; }
+  function admin(){ return me().role==='admin'; }
+  function canEdit(o){ if(admin()) return true; if(o.locked) return false; return o.createdBy===me().userId; }
+
+  window.addDynamicSection=function(type){
+    const d=dyn(); if(!d) return;
+    const id='dyn_'+Date.now();
+    d.sections[id]={id,type,title:type,createdBy:me().userId,locked:false,tiles:{}};
+    save(); render();
+  };
+
+  window.toggleDynLock=function(id){
+    if(!admin()) return;
+    dyn().sections[id].locked=!dyn().sections[id].locked;
+    save(); render();
+  };
+
+  window.addDynTile=function(secId,type){
+    const d=dyn();
+    const tid='tile_'+Date.now();
+    d.sections[secId].tiles[tid]={id:tid,type,title:type,value:'',createdBy:me().userId,locked:false};
+    save(); render();
+  };
+
+  function render(){
+    const h=document.getElementById('dynamic-section-host'); if(!h) return;
+    const d=dyn(); if(!d) return;
+    h.innerHTML='';
+    Object.values(d.sections).forEach(s=>{
+      const el=document.createElement('div');
+      el.className='bg-white border rounded-xl p-4 mb-4';
+      el.innerHTML=`
+        <div class="flex justify-between mb-2">
+          <h3 contenteditable="${canEdit(s)}"
+              onblur="wsActive.state.dynamic.sections['${s.id}'].title=this.innerText;wsSaveCurrentWorkspace()"
+              class="text-lg font-semibold">${s.title}</h3>
+          ${admin()?`<button onclick="toggleDynLock('${s.id}')" class="text-xs border px-2 py-1 rounded">${s.locked?'Unlock':'Lock'}</button>`:''}
+        </div>
+        <div class="flex gap-2 mb-3">
+          <button onclick="addDynTile('${s.id}','Text')" class="text-xs bg-indigo-600 text-white px-2 py-1 rounded">+ Text</button>
+          <button onclick="addDynTile('${s.id}','Number')" class="text-xs bg-indigo-600 text-white px-2 py-1 rounded">+ Number</button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          ${Object.values(s.tiles).map(t=>`
+            <div class="border p-3 rounded">
+              <h4 contenteditable="${canEdit(t)}"
+                  onblur="wsActive.state.dynamic.sections['${s.id}'].tiles['${t.id}'].title=this.innerText;wsSaveCurrentWorkspace()"
+                  class="font-medium text-sm">${t.title}</h4>
+              <div contenteditable="${canEdit(t)}"
+                   onblur="wsActive.state.dynamic.sections['${s.id}'].tiles['${t.id}'].value=this.innerText;wsSaveCurrentWorkspace()"
+                   class="text-sm mt-1">${t.value||'Edit content'}</div>
+            </div>`).join('')}
+        </div>`;
+      h.appendChild(el);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(render,800));
+})();
+</script>
+<!-- ================== /DYNAMIC SECTIONS ================== -->
 
 </body>
 </html>
