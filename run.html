@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Run Dashboard</title>
+
+  <!-- CDN dependencies -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-weight:700;font-size:12px;line-height:18px;}
+    .badge-green{background:#dcfce7;color:#166534;border:1px solid #bbf7d0;}
+    .badge-yellow{background:#fef9c3;color:#854d0e;border:1px solid #fde68a;}
+    .badge-red{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;}
+  </style>
+
+  <script>
+    /* =========================================================
+       Utilities
+    ========================================================= */
+    function qs(id){ return document.getElementById(id); }
+    function qsa(sel){ return document.querySelectorAll(sel); }
+
+    function esc(s){
+      return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+    }
+
+    function toast(msg, kind){
+      const t = qs('toast');
+      if(!t) return;
+      t.textContent = msg;
+      t.classList.remove('hidden');
+      t.classList.remove('bg-emerald-600','bg-red-600','bg-slate-900','bg-amber-700');
+      t.classList.add(kind==='error' ? 'bg-red-600' : (kind==='ok' ? 'bg-emerald-600' : (kind==='warn'?'bg-amber-700':'bg-slate-900')));
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(()=>t.classList.add('hidden'), 2600);
+    }
+
+    function dashId(){
+      try{ return new URL(location.href).searchParams.get('dash') || ''; }
+      catch(e){ return ''; }
+    }
+
+    function setDashInUrlNoReload(id){
+      try{
+        const u = new URL(location.href);
+        if(id) u.searchParams.set('dash', id);
+        else u.searchParams.delete('dash');
+        history.pushState({}, '', u.pathname + u.search);
+      }catch(e){}
+      const dp = qs('dashPill');
+      if(dp) dp.textContent = id || '—';
+    }
+
+    /* =========================================================
+       Auth helpers (optional, compatible with your app)
+    ========================================================= */
+    async function twJson(url, opt){
+      opt = opt || {};
+      const r = await fetch(url, {
+        credentials:'same-origin',
+        headers:{'Accept':'application/json','Content-Type':'application/json'},
+        ...opt
+      });
+      const t = await r.text();
+      let j={};
+      try{ j = JSON.parse(t||'{}'); }catch(e){ j = {error:t}; }
+      if(!r.ok) throw new Error(j.error||j.message||t||('HTTP '+r.status));
+      return j;
+    }
+
+    async function twInit(){
+      try{
+        const me = await twJson('/api/auth/me');
+        if(!me || !me.authenticated){
+          const next = encodeURIComponent(location.pathname + location.search + location.hash);
+          location.replace('/login.html?next='+next);
+          return;
+        }
+        window.twMe = me;
+
+        const pill = qs('tw-userpill');
+        if(pill) pill.textContent = (me.userId||'User') + ' • ' + (me.role||'viewer');
+
+        const eb = qs('tw-execboard');
+        if(eb){
+          const perms = me.permissions || {};
+          eb.classList.toggle('hidden', !((me.role==='admin') || perms.executiveBoard));
+        }
+
+        const um = qs('tw-usermgr');
+        if(um) um.classList.toggle('hidden', me.role!=='admin');
+
+        const lo = qs('tw-logout');
+        if(lo) lo.onclick = async ()=>{
+          try{ await twJson('/api/auth/logout',{method:'POST',body:'{}'}); }catch(e){}
+          location.href='/login.html';
+        };
+      }catch(e){
+        const next = encodeURIComponent(location.pathname + location.search + location.hash);
+        location.replace('/login.html?next='+next);
+      }
+    }
+
+    /* =========================================================
+       StateApi (inline)
+    ========================================================= */
+    (function(global){
+      function toQS(p){
+        const e=encodeURIComponent, a=[];
+        for(const k in p){
+          if(!Object.prototype.hasOwnProperty.call(p,k)) continue;
+          if(p[k]===undefined || p[k]===null) continue;
+          a.push(e(k)+'='+e(String(p[k])));
+        }
+        return a.length ? ('?'+a.join('&')) : '';
+      }
+      function safeParse(t, fb){ try{ return JSON.parse(t||''); } catch(e){ return fb; } }
+      function req(url, opt){
+        opt = opt || {};
+        const h = opt.headers || {};
+        h['Accept'] = h['Accept'] || 'application/json';
+        if(opt.body!==undefined && opt.body!==null) h['Content-Type'] = h['Content-Type'] || 'application/json';
+
+        return fetch(url, {
+          method: opt.method || 'GET',
+          credentials: 'same-origin',
+          headers: h,
+          body: (opt.body!==undefined && opt.body!==null)
+            ? (typeof opt.body==='string' ? opt.body : JSON.stringify(opt.body))
+            : undefined
+        }).then(async r=>{
+          const t = await r.text();
+          const j = safeParse(t, {error:t});
+          if(!r.ok) throw new Error((j && (j.error||j.message)) || t || ('HTTP '+r.status));
+          return j;
+        });
+      }
+
+      global.StateApi = {
+        list: ()=> req('/api/state'+toQS({list:1}), {method:'GET'}).then(d => (d&&d.dashboards)||[]),
+        get:  (id)=> req('/api/state'+toQS({dash:id}), {method:'GET'}),
+        save: (id,state,name)=> req('/api/state'+toQS({dash:id}), {method:'POST', body:{state,name}}),
+        merge:(id,patch)=> req('/api/state'+toQS({dash:id,merge:1}), {method:'POST', body:{patch}}),
+        publish:(id,body)=> req('/api/state'+toQS({dash:id,publish:1}), {method:'POST', body:body||{}}),
+        unpublish:(id)=> req('/api/state'+toQS({dash:id,unpublish:1}), {method:'POST', body:{}}),
+        remove:(id)=> req('/api/state'+toQS({dash:id}), {method:'DELETE', body:{}})
+      };
+    })(window);
+
+    /* =========================================================
+       Robust datetime parser
+       - Supports:
+         * datetime-local: YYYY-MM-DDTHH:mm[:ss]
+         * ISO strings
+         * CSV values like: 8/12/2025 3:13:00 pm
+         * DD/MM/YYYY HH:mm[:ss]
+         * Excel serial numbers
+    ========================================================= */
+    function parseDateTimeAny(v){
+      if(v === null || v === undefined || v === '') return null;
+      if(v instanceof Date) return isFinite(v.getTime()) ? v : null;
+
+      // Excel date serial
+      if(typeof v === 'number' && isFinite(v)){
+        if(window.XLSX && XLSX.SSF && XLSX.SSF.parse_date_code){
+          const dc = XLSX.SSF.parse_date_code(v);
+          if(dc){
+            return new Date(dc.y, dc.m-1, dc.d, dc.H||0, dc.M||0, dc.S||0, 0);
+          }
+        }
+        const excelEpoch = new Date(1899,11,30);
+        return new Date(excelEpoch.getTime() + v*86400000);
+      }
+
+      const s = String(v).trim();
+      if(!s) return null;
+
+      // datetime-local / ISO without timezone
+      let m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?$/);
+      if(m){
+        const yy=+m[1], mo=+m[2], dd=+m[3], hh=+m[4], mm=+m[5], ss=+(m[6]||0);
+        return new Date(yy, mo-1, dd, hh, mm, ss, 0);
+      }
+
+      // D/M/YYYY h:mm:ss am/pm (Indian format from your CSV)
+      m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/i);
+      if(m){
+        let dd=+m[1], mo=+m[2], yy=+m[3];
+        let hh=+m[4], mm=+m[5], ss=+(m[6]||0);
+        const ap=(m[7]||'').toLowerCase();
+        if(ap){
+          if(ap==='pm' && hh<12) hh += 12;
+          if(ap==='am' && hh===12) hh = 0;
+        }
+        return new Date(yy, mo-1, dd, hh, mm, ss, 0);
+      }
+
+      // DD/MM/YYYY HH:mm[:ss]
+      m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+      if(m){
+        const dd=+m[1], mo=+m[2], yy=+m[3];
+        const hh=+(m[4]||0), mm=+(m[5]||0), ss=+(m[6]||0);
+        return new Date(yy, mo-1, dd, hh, mm, ss, 0);
+      }
+
+      // Last resort
+      const d = new Date(s);
+      return isFinite(d.getTime()) ? d : null;
+    }
+
+    /* =========================================================
+       Business hours calculator
+       - Working hours: 09:00–18:00
+       - Weekends off
+    ========================================================= */
+    function businessHoursDiff(start, end, opts){
+      opts = opts || {};
+      const workStart = opts.workStart ?? 9;
+      const workEnd   = opts.workEnd   ?? 18;
+      const weekendOff = opts.weekendOff ?? true;
+
+      const s = parseDateTimeAny(start);
+      const e = parseDateTimeAny(end);
+      if(!s || !e || e <= s) return 0;
+
+      function isWeekend(d){
+        const dow = d.getDay();
+        return (dow===0 || dow===6);
+      }
+      function dayWindow(d){
+        const ds = new Date(d.getFullYear(), d.getMonth(), d.getDate(), workStart, 0,0,0);
+        const de = new Date(d.getFullYear(), d.getMonth(), d.getDate(), workEnd, 0,0,0);
+        return {ds,de};
+      }
+
+      let totalMs = 0;
+      let cur = new Date(s.getFullYear(), s.getMonth(), s.getDate(), s.getHours(), s.getMinutes(), s.getSeconds(), 0);
+
+      while(cur.toDateString() !== e.toDateString()){
+        if(!(weekendOff && isWeekend(cur))){
+          const {ds,de} = dayWindow(cur);
+          const from = new Date(Math.max(cur.getTime(), ds.getTime()));
+          const to   = new Date(de.getTime());
+          if(to > from) totalMs += (to - from);
+        }
+        cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate()+1, 0,0,0,0);
+      }
+
+      if(!(weekendOff && isWeekend(e))){
+        const {ds,de} = dayWindow(e);
+        const from = new Date(Math.max(ds.getTime(), s.getTime()));
+        const to   = new Date(Math.min(e.getTime(), de.getTime()));
+        if(to > from) totalMs += (to - from);
+      }
+
+      return +(totalMs/36e5).toFixed(2);
+    }
+
+    /* =========================================================
+       Fast cache for instant render
+    ========================================================= */
+    const Cache = {
+      keyDashIndex: 'tw_dash_index_v1',
+      keyTickets: (dash)=> `tw_run_tickets_${dash}`,
+
+      saveTickets(dash, tickets, runUpdatedAt){
+        try{ localStorage.setItem(this.keyTickets(dash), JSON.stringify({tickets, runUpdatedAt: runUpdatedAt||null, cachedAt: Date.now()})); }catch(e){}
+      },
+      loadTickets(dash){
+        try{ const raw = localStorage.getItem(this.keyTickets(dash)); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+      },
+      saveIndex(list){
+        try{ localStorage.setItem(this.keyDashIndex, JSON.stringify({list, cachedAt: Date.now()})); }catch(e){}
+      },
+      loadIndex(){
+        try{ const raw = localStorage.getItem(this.keyDashIndex); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+      }
+    };
+
+    /* =========================================================
+       Run App
+       - NO AUTO SAVE
+       - CRUD tickets
+       - Upload CSV/XLSX
+       - ADO sync (client-side)
+       - Responsive summary cards
+    ========================================================= */
+    (function(){
+      let tickets = [];
+      let pieChart=null, barChart=null;
+      const thresholds = {Small:4, Medium:6, Large:8};
+      let dirty = false;
+      let loadToken = 0;
+
+      function markDirty(){
+        dirty = true;
+        const ind = qs('ws-indicator');
+        if(ind){
+          ind.textContent = 'Unsaved';
+          ind.className = 'text-xs text-amber-800 px-2 py-1 rounded-full bg-amber-50 border border-amber-200';
+        }
+      }
+      function clearDirty(){ dirty = false; }
+
+      function typeFromTags(tags, fallback){
+        const t = String(tags||'').toLowerCase();
+        if(t.includes('small')) return 'Small';
+        if(t.includes('medium')) return 'Medium';
+        if(t.includes('large')) return 'Large';
+        return fallback || 'Medium';
+      }
+
+      function computeTotals(){
+        const total = tickets.length;
+        let onTime = 0;
+        for(const t of tickets){
+          if(Number(t.actualTime) <= Number(t.threshold)) onTime++;
+        }
+        const breached = total - onTime;
+        const sla = total ? ((onTime/total)*100).toFixed(1) : '0.0';
+        return {total,onTime,breached,sla};
+      }
+
+      function buildBarData(){
+        const map = {};
+        for(const t of tickets){
+          const tp = t.type || 'Medium';
+          map[tp] ||= {type:tp,total:0,onTime:0,breached:0,totalTime:0};
+          map[tp].total++;
+          map[tp].totalTime += Number(t.actualTime||0);
+          if(Number(t.actualTime) <= Number(t.threshold)) map[tp].onTime++;
+          else map[tp].breached++;
+        }
+        const arr = Object.values(map);
+        const order={Small:1,Medium:2,Large:3};
+        arr.sort((a,b)=>(order[a.type]||99)-(order[b.type]||99) || a.type.localeCompare(b.type));
+        return arr;
+      }
+
+      function renderKPIs(t){
+        qs('kpiTotal').textContent = String(t.total);
+        qs('kpiOnTime').textContent = String(t.onTime);
+        qs('kpiBreached').textContent = String(t.breached);
+        qs('kpiSla').textContent = t.sla + '%';
+      }
+
+      function renderCharts(totals, barData){
+        if(typeof Chart === 'undefined'){ toast('Chart.js not loaded','error'); return; }
+        if(typeof ChartDataLabels !== 'undefined'){ try{ Chart.register(ChartDataLabels); }catch(e){} }
+
+        const pie = qs('pieChart');
+        const bar = qs('barChart');
+        if(!pie || !bar) return;
+
+        if(pieChart) pieChart.destroy();
+        pieChart = new Chart(pie.getContext('2d'), {
+          type:'doughnut',
+          data:{ labels:['On Time','Breached'], datasets:[{ data:[totals.onTime, totals.breached], backgroundColor:['#10b981','#ef4444'], borderWidth:0 }]},
+          options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom'}, datalabels:{color:'#111',font:{weight:'bold'},formatter:v=>v} } }
+        });
+
+        if(barChart) barChart.destroy();
+        barChart = new Chart(bar.getContext('2d'), {
+          type:'bar',
+          data:{
+            labels: barData.map(d=>d.type),
+            datasets:[
+              {label:'On Time', data:barData.map(d=>d.onTime), backgroundColor:'#10b981'},
+              {label:'Breached', data:barData.map(d=>d.breached), backgroundColor:'#ef4444'}
+            ]
+          },
+          options:{ responsive:true, maintainAspectRatio:false, scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}, plugins:{legend:{position:'bottom'}} }
+        });
+      }
+
+      function renderSummary(barData){
+        const body = qs('tableBody');
+        const cards = qs('summaryCards');
+
+        if(body){
+          body.innerHTML = '';
+          for(const d of barData){
+            const avg = d.total ? (d.totalTime/d.total).toFixed(2) : '0.00';
+            const sla = d.total ? ((d.onTime/d.total)*100).toFixed(1) : '0.0';
+            let badgeClass='badge-green';
+            if(Number(sla)<70) badgeClass='badge-red';
+            else if(Number(sla)<90) badgeClass='badge-yellow';
+            const thr = (thresholds[d.type]!==undefined) ? thresholds[d.type] : '-';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="py-2"><strong>${esc(d.type)}</strong></td>
+              <td class="py-2 text-center">${thr}</td>
+              <td class="py-2 text-center">${d.total}</td>
+              <td class="py-2 text-center"><span class="badge badge-green">${d.onTime}</span></td>
+              <td class="py-2 text-center"><span class="badge badge-red">${d.breached}</span></td>
+              <td class="py-2 text-center">${avg}</td>
+              <td class="py-2 text-center"><span class="badge ${badgeClass}">${sla}%</span></td>
+            `;
+            body.appendChild(tr);
+          }
+        }
+
+        if(cards){
+          cards.innerHTML = '';
+          for(const d of barData){
+            const avg = d.total ? (d.totalTime/d.total).toFixed(2) : '0.00';
+            const sla = d.total ? ((d.onTime/d.total)*100).toFixed(1) : '0.0';
+            let badgeClass='badge-green';
+            if(Number(sla)<70) badgeClass='badge-red';
+            else if(Number(sla)<90) badgeClass='badge-yellow';
+            const thr = (thresholds[d.type]!==undefined) ? thresholds[d.type] : '-';
+
+            const div = document.createElement('div');
+            div.className = 'rounded-2xl border border-slate-200 p-4 bg-white';
+            div.innerHTML = `
+              <div class="flex items-center justify-between gap-2">
+                <div class="font-semibold">${esc(d.type)}</div>
+                <span class="badge ${badgeClass}">${sla}%</span>
+              </div>
+              <div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                <div class="text-slate-500">Threshold</div><div class="text-right">${thr}</div>
+                <div class="text-slate-500">Total</div><div class="text-right">${d.total}</div>
+                <div class="text-slate-500">On Time</div><div class="text-right">${d.onTime}</div>
+                <div class="text-slate-500">Breached</div><div class="text-right">${d.breached}</div>
+                <div class="text-slate-500">Avg Time</div><div class="text-right">${avg}</div>
+              </div>
+            `;
+            cards.appendChild(div);
+          }
+        }
+      }
+
+      function renderTickets(){
+        const tb = qs('ticketTbody');
+        if(!tb) return;
+        const q = (qs('searchBox')?.value || '').toLowerCase().trim();
+        tb.innerHTML = '';
+
+        tickets.forEach((t, idx)=>{
+          const hay = (String(t.id)+' '+String(t.title)+' '+String(t.type)).toLowerCase();
+          if(q && !hay.includes(q)) return;
+
+          const tr = document.createElement('tr');
+          tr.className = 'border-b hover:bg-slate-50';
+          tr.innerHTML = `
+            <td class="py-2 pr-3 font-mono text-slate-700 whitespace-nowrap">${esc(t.id)}</td>
+            <td class="py-2 pr-3 text-slate-800 min-w-[260px]">${esc(t.title)}</td>
+            <td class="py-2 pr-3 text-slate-700 whitespace-nowrap">${esc(t.type)}</td>
+            <td class="py-2 pr-3 text-right text-slate-700 whitespace-nowrap">${Number(t.actualTime||0).toFixed(2)}</td>
+            <td class="py-2 pr-3 text-right text-slate-700 whitespace-nowrap">${Number(t.threshold||0).toFixed(2)}</td>
+            <td class="py-2 text-right whitespace-nowrap">
+              <button class="ticketEdit text-indigo-600 hover:underline text-xs" data-idx="${idx}">Edit</button>
+              <span class="mx-1 text-slate-300">|</span>
+              <button class="ticketDel text-red-600 hover:underline text-xs" data-idx="${idx}">Delete</button>
+            </td>
+          `;
+          tb.appendChild(tr);
+        });
+      }
+
+      function renderAll(){
+        const totals = computeTotals();
+        renderKPIs(totals);
+        const bar = buildBarData();
+        renderCharts(totals, bar);
+        renderSummary(bar);
+        renderTickets();
+      }
+
+      /* ---------- Modals ---------- */
+      function openModal(){ const m=qs('runModal'); if(!m) return; m.classList.remove('hidden'); m.classList.add('flex'); }
+      function closeModal(){ const m=qs('runModal'); if(!m) return; m.classList.add('hidden'); m.classList.remove('flex'); }
+      function openAdoForm(){ qs('adoFormWrap')?.classList.remove('hidden'); }
+      function closeAdoForm(){ qs('adoFormWrap')?.classList.add('hidden'); }
+
+      function openTicketModal(mode, idx){
+        const m = qs('ticketModal');
+        if(!m) return;
+        m.dataset.mode = mode;
+        m.dataset.idx = (idx!==undefined && idx!==null) ? String(idx) : '';
+
+        const t = (mode==='edit' && tickets[idx]) ? tickets[idx] : {
+          id:'', title:'', type:'Medium', startAt:'', endAt:'', actualTime:0, threshold:6
+        };
+
+        qs('tId').value = t.id || '';
+        qs('tTitle').value = t.title || '';
+        qs('tType').value = t.type || 'Medium';
+        qs('tStart').value = toDatetimeLocal(t.startAt);
+        qs('tEnd').value = toDatetimeLocal(t.endAt);
+        qs('tThr').value = String(t.threshold ?? (thresholds[t.type]||6));
+        qs('tActual').value = Number(t.actualTime||0).toFixed(2);
+
+        qs('ticketModalTitle').textContent = (mode==='edit') ? 'Edit Ticket' : 'Add Ticket';
+
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+        recalcHoursPreview();
+      }
+      function closeTicketModal(){
+        const m=qs('ticketModal'); if(!m) return;
+        m.classList.add('hidden'); m.classList.remove('flex');
+      }
+
+      function toDatetimeLocal(v){
+        const d = parseDateTimeAny(v);
+        if(!d) return '';
+        const pad = n => String(n).padStart(2,'0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+
+      function recalcHoursPreview(){
+        const startAt = qs('tStart')?.value || '';
+        const endAt = qs('tEnd')?.value || '';
+        const hrs = (startAt && endAt) ? businessHoursDiff(startAt, endAt, {workStart:9, workEnd:18, weekendOff:true}) : 0;
+        qs('tActual').value = Number(hrs||0).toFixed(2);
+      }
+
+      function saveTicketFromModal(){
+        const mode = qs('ticketModal').dataset.mode;
+        const idxStr = qs('ticketModal').dataset.idx;
+        const idx = idxStr ? Number(idxStr) : null;
+
+        const id = String(qs('tId').value||'').trim() || String(Math.floor(Math.random()*1000000));
+        const title = String(qs('tTitle').value||'').trim() || 'Untitled';
+        const type = String(qs('tType').value||'Medium');
+        const startAt = String(qs('tStart').value||'').trim();
+        const endAt = String(qs('tEnd').value||'').trim();
+        const threshold = Number(qs('tThr').value || thresholds[type] || 6);
+        const actualTime = (startAt && endAt) ? businessHoursDiff(startAt, endAt, {workStart:9, workEnd:18, weekendOff:true}) : 0;
+
+        const ticket = {
+          id, title, type,
+          startAt: startAt || '',
+          endAt: endAt || '',
+          actualTime: isFinite(actualTime) ? actualTime : 0,
+          threshold: isFinite(threshold) ? threshold : (thresholds[type]||6)
+        };
+
+        if(mode==='edit' && idx!==null && tickets[idx]) tickets[idx] = ticket;
+        else tickets.unshift(ticket);
+
+        markDirty();
+        closeTicketModal();
+        renderAll();
+      }
+
+      function deleteTicket(idx){
+        if(!tickets[idx]) return;
+        if(!confirm('Delete this ticket?')) return;
+        tickets.splice(idx, 1);
+        markDirty();
+        renderAll();
+      }
+
+      function clearTickets(){
+        if(!tickets.length) return;
+        if(!confirm('Clear all tickets?')) return;
+        tickets = [];
+        markDirty();
+        renderAll();
+      }
+
+      /* ---------- Upload CSV/XLSX ---------- */
+      function parseRows(rows){
+        const out = [];
+        for(const r of (rows||[])){
+          const id = r.ID || r.Id || r.id || r['\ufeffID'] || r['Work Item Id'] || r['System.Id'] || (''+Math.floor(Math.random()*1000000));
+          const title = r.Title || r.title || 'Untitled';
+          // Your CSV uses Tags like: "Rollout; small" or "large" (case-insensitive)
+          const type = typeFromTags(r.Tags || r.tags, 'Medium');
+
+          const startAt = r['Actual Start date'] || r['Actual Start Date'] || r['Actual Start'] || r.Start || r.startAt || '';
+          const endAt = r['Actual End date'] || r['Actual End Date'] || r['Actual End'] || r.End || r.endAt || '';
+
+          const actualTime = (startAt && endAt)
+            ? businessHoursDiff(startAt, endAt, {workStart:9, workEnd:18, weekendOff:true})
+            : 0;
+
+          const threshold = thresholds[type] ?? 6;
+
+          out.push({
+            id: String(id),
+            title: String(title),
+            type: String(type),
+            startAt: startAt ? String(startAt) : '',
+            endAt: endAt ? String(endAt) : '',
+            actualTime: isFinite(actualTime) ? actualTime : 0,
+            threshold
+          });
+        }
+        return out;
+      }
+
+      function uploadFile(file){
+        if(!file) return;
+        toast('Reading file…','info');
+        const isCsv = (file.name||'').toLowerCase().endsWith('.csv');
+        const reader = new FileReader();
+
+        reader.onerror = ()=> toast('File read failed','error');
+        reader.onload = (e)=>{
+          try{
+            let wb;
+            if(isCsv){
+              wb = XLSX.read(String(e.target.result||''), {type:'string'});
+            }else{
+              wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+            }
+            const sheet = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(sheet);
+            tickets = parseRows(rows);
+
+            qs('filePill').textContent = `${file.name} (${tickets.length} rows)`;
+            markDirty();
+            closeModal();
+            renderAll();
+            toast('Loaded. Click Save to persist.','warn');
+          }catch(err){
+            console.error(err);
+            toast('Upload failed: '+(err.message||String(err)),'error');
+          }
+        };
+
+        if(isCsv) reader.readAsText(file);
+        else reader.readAsArrayBuffer(file);
+      }
+
+      /* ---------- ADO sync (client-side) ---------- */
+      function normalizeOrg(org){
+        org = String(org||'').trim();
+        org = org.replace(/^https?:\/\//i,'');
+        org = org.replace(/^dev\.azure\.com\//i,'');
+        org = org.replace(/\/$/,'');
+        return org;
+      }
+      function authHeaderFromPat(pat){
+        return 'Basic ' + btoa(':' + String(pat||''));
+      }
+      function num(v){ const n = Number(v); return isFinite(n) ? n : 0; }
+      function mapTypeFromWorkItem(wi){
+        const f = (wi && wi.fields) ? wi.fields : {};
+        const wtype = f['System.WorkItemType'] || '';
+        const tags = String(f['System.Tags']||'').toLowerCase();
+        if(tags.includes('small')) return 'Small';
+        if(tags.includes('medium')) return 'Medium';
+        if(tags.includes('large')) return 'Large';
+        if(String(wtype).toLowerCase().includes('bug')) return 'Medium';
+        if(String(wtype).toLowerCase().includes('task')) return 'Small';
+        return 'Medium';
+      }
+
+      async function adoSubmit(){
+        toast('Querying ADO…','info');
+        const org = normalizeOrg(qs('adoOrg')?.value||'');
+        const project = String(qs('adoProject')?.value||'').trim();
+        const queryId = String(qs('adoQueryId')?.value||'').trim();
+        const pat = String(qs('adoPat')?.value||'').trim();
+
+        if(!org || !project || !queryId || !pat){
+          toast('Fill Organization, Project, Query ID, PAT','error');
+          return;
+        }
+
+        try{
+          const baseUrl = `https://dev.azure.com/${org}/${encodeURIComponent(project)}`;
+          const headers = {
+            'Accept':'application/json',
+            'Content-Type':'application/json',
+            'Authorization': authHeaderFromPat(pat)
+          };
+
+          const qUrl = `${baseUrl}/_apis/wit/queries/${encodeURIComponent(queryId)}?$expand=wiql&api-version=7.1`;
+          const qResp = await fetch(qUrl, {method:'GET', headers});
+          const qText = await qResp.text();
+          let qJson={}; try{ qJson=JSON.parse(qText||'{}'); }catch(e){ qJson={error:qText}; }
+          if(!qResp.ok) throw new Error(qJson.error || qJson.message || qText || 'Query fetch failed');
+
+          const wiql = String(qJson.wiql||'').trim();
+          if(!wiql) throw new Error('No WIQL found for queryId');
+
+          const wiqlUrl = `${baseUrl}/_apis/wit/wiql?api-version=7.1`;
+          const wiqlResp = await fetch(wiqlUrl, {method:'POST', headers, body: JSON.stringify({query: wiql})});
+          const wiqlText = await wiqlResp.text();
+          let wiqlJson={}; try{ wiqlJson=JSON.parse(wiqlText||'{}'); }catch(e){ wiqlJson={error:wiqlText}; }
+          if(!wiqlResp.ok) throw new Error(wiqlJson.error || wiqlJson.message || wiqlText || 'WIQL execution failed');
+
+          const ids = (wiqlJson.workItems||[]).map(x=>x.id).filter(Boolean);
+          if(!ids.length){ toast('No tickets returned','error'); return; }
+
+          const batchUrl = `${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`;
+          const fields = [
+            'System.Id','System.Title','System.WorkItemType','System.Tags',
+            'Microsoft.VSTS.Scheduling.CompletedWork','Microsoft.VSTS.Scheduling.OriginalEstimate'
+          ];
+
+          const items=[];
+          for(let i=0;i<ids.length;i+=200){
+            const chunk = ids.slice(i, i+200);
+            const bResp = await fetch(batchUrl, {method:'POST', headers, body: JSON.stringify({ids: chunk, fields})});
+            const bText = await bResp.text();
+            let bJson={}; try{ bJson=JSON.parse(bText||'{}'); }catch(e){ bJson={error:bText}; }
+            if(!bResp.ok) throw new Error(bJson.error || bJson.message || bText || 'WorkItems batch failed');
+            if(Array.isArray(bJson.value)) items.push(...bJson.value);
+          }
+
+          tickets = items.map(wi=>{
+            const f = wi.fields || {};
+            const type = mapTypeFromWorkItem(wi);
+            const actualTime = num(f['Microsoft.VSTS.Scheduling.CompletedWork'] || f['Microsoft.VSTS.Scheduling.OriginalEstimate']);
+            const threshold = thresholds[type] ?? 6;
+            return {
+              id: String(f['System.Id'] || wi.id || ''),
+              title: String(f['System.Title'] || ''),
+              type,
+              startAt: '',
+              endAt: '',
+              actualTime,
+              threshold
+            };
+          });
+
+          qs('filePill').textContent = `ADO Sync (${tickets.length} tickets)`;
+          markDirty();
+          closeAdoForm();
+          closeModal();
+          renderAll();
+          toast('ADO loaded. Click Save to persist.','warn');
+        }catch(e){
+          console.error(e);
+          toast('ADO sync failed: '+(e.message||String(e)),'error');
+        }
+      }
+
+      /* ---------- Save/Load (manual) + fast cache ---------- */
+      async function saveToWorkspace(){
+        const d = dashId();
+        if(!d){ toast('Select/Create a workspace first','error'); throw new Error('No workspace selected'); }
+        toast('Saving…','info');
+
+        const totals = computeTotals();
+        const bau = { totalTickets: totals.total, withinSLA: totals.onTime, breachedSLA: totals.breached, slaPercentage: totals.sla };
+        const runUpdatedAt = new Date().toISOString();
+
+        await window.StateApi.merge(d, {
+          run:{ tickets, updatedAt: runUpdatedAt },
+          executive:{ bauData: bau }
+        });
+
+        Cache.saveTickets(d, tickets, runUpdatedAt);
+        clearDirty();
+        toast('Saved','ok');
+        window.dispatchEvent(new CustomEvent('tw:refreshIndicator', {detail:{dash:d}}));
+      }
+
+      function applyTickets(list, label){
+        tickets = normalizeTickets(Array.isArray(list) ? list : []);
+        qs('filePill').textContent = tickets.length ? `${label} (${tickets.length} tickets)` : 'No data loaded';
+        renderAll();
+      }
+
+      function normalizeTickets(list){
+        // Recompute business hours when start/end are present (fixes old saved/cached data)
+        return (Array.isArray(list)?list:[]).map(t=>{
+          const tt = Object.assign({}, t||{});
+          if(tt.startAt && tt.endAt){
+            const h = businessHoursDiff(tt.startAt, tt.endAt, {workStart:9, workEnd:18, weekendOff:true});
+            tt.actualTime = isFinite(h) ? h : (Number(tt.actualTime)||0);
+          }
+          if(tt.type){
+            const tm = {Small:4, Medium:6, Large:8};
+            if(tt.threshold===undefined || tt.threshold===null || !isFinite(Number(tt.threshold))) tt.threshold = tm[tt.type] ?? 6;
+          }
+          return tt;
+        });
+      }
+
+async function loadFromWorkspace(id){
+        const d = id || dashId();
+        const token = ++loadToken;
+
+        if(!d){ applyTickets([], 'Workspace'); return; }
+
+        const cached = Cache.loadTickets(d);
+        if(cached && Array.isArray(cached.tickets)){
+          applyTickets(cached.tickets, 'Cached');
+        }else{
+          qs('filePill').textContent = 'Loading…';
+        }
+
+        try{
+          const resp = await window.StateApi.get(d);
+          if(token !== loadToken) return;
+          const st = resp && resp.state ? resp.state : {};
+          const run = st.run || {};
+          const serverTickets = Array.isArray(run.tickets) ? run.tickets : [];
+          const runUpdatedAt = run.updatedAt || null;
+
+          const cachedUpdatedAt = cached ? cached.runUpdatedAt : null;
+          const same = cachedUpdatedAt && runUpdatedAt && String(cachedUpdatedAt) === String(runUpdatedAt);
+
+          if(!same){
+            applyTickets(serverTickets, 'Workspace');
+            Cache.saveTickets(d, serverTickets, runUpdatedAt);
+          }else{
+            qs('filePill').textContent = `Workspace (${serverTickets.length} tickets)`;
+          }
+
+          clearDirty();
+        }catch(e){
+          if(token !== loadToken) return;
+          toast('Failed to load workspace: '+(e.message||String(e)),'error');
+        }
+      }
+
+      function downloadJpg(){
+        const region = qs('captureRegion');
+        if(!region){ toast('Capture region not found','error'); return; }
+        toast('Generating image…','info');
+        html2canvas(region, {backgroundColor:'#ffffff', scale:2})
+          .then(canvas=>{
+            const a=document.createElement('a');
+            a.download = 'Run_Report_' + new Date().toISOString().slice(0,10) + '.jpg';
+            a.href = canvas.toDataURL('image/jpeg',0.95);
+            a.click();
+            toast('Downloaded','ok');
+          })
+          .catch(()=>toast('Download failed','error'));
+      }
+
+      function init(){
+        window.RunApp = {
+          openGenerate: openModal,
+          download: downloadJpg,
+          saveNow: saveToWorkspace,
+          loadWorkspace: loadFromWorkspace,
+          isDirty: ()=>dirty,
+          getTickets: ()=>tickets
+        };
+
+        // modal wiring
+        qs('runModalClose')?.addEventListener('click', closeModal);
+        qs('runModalCancel')?.addEventListener('click', closeModal);
+        qs('uploadPick')?.addEventListener('click', ()=>qs('fileInput')?.click());
+        qs('fileInput')?.addEventListener('change', (e)=>{
+          const f = e.target.files && e.target.files[0];
+          if(f) uploadFile(f);
+          e.target.value='';
+        });
+
+        // ADO
+        qs('adoOpenBtn')?.addEventListener('click', openAdoForm);
+        qs('adoCancel')?.addEventListener('click', closeAdoForm);
+        qs('adoSubmit')?.addEventListener('click', adoSubmit);
+
+        // tickets
+        qs('searchBox')?.addEventListener('input', renderTickets);
+        qs('toggleTicketsBtn')?.addEventListener('click', ()=>{
+          const sec = qs('ticketsSection');
+          if(!sec) return;
+          sec.classList.toggle('hidden');
+          qs('toggleTicketsBtn').textContent = sec.classList.contains('hidden') ? 'Show Tickets' : 'Hide Tickets';
+        });
+        qs('ticketsSection')?.classList.add('hidden');
+
+        // CRUD
+        qs('addTicketBtn')?.addEventListener('click', ()=>openTicketModal('add'));
+        qs('clearTicketsBtn')?.addEventListener('click', clearTickets);
+
+        qs('ticketTbody')?.addEventListener('click', (e)=>{
+          const edit = e.target.closest?.('.ticketEdit');
+          const del = e.target.closest?.('.ticketDel');
+          if(edit) openTicketModal('edit', Number(edit.dataset.idx));
+          if(del) deleteTicket(Number(del.dataset.idx));
+        });
+
+        qs('ticketModalClose')?.addEventListener('click', closeTicketModal);
+        qs('ticketCancel')?.addEventListener('click', closeTicketModal);
+        qs('ticketSave')?.addEventListener('click', saveTicketFromModal);
+        qs('tStart')?.addEventListener('input', recalcHoursPreview);
+        qs('tEnd')?.addEventListener('input', recalcHoursPreview);
+
+        renderAll();
+
+        // workspace changed event
+        window.addEventListener('tw:workspaceChanged', (e)=>{
+          const d = e.detail?.dash || dashId();
+          loadFromWorkspace(d);
+        });
+
+        if(window.lucide?.createIcons) window.lucide.createIcons();
+      }
+
+      window.addEventListener('DOMContentLoaded', init);
+    })();
+
+    /* =========================================================
+       Workspace manager (NO auto-save on switch)
+    ========================================================= */
+    (function(){
+      async function updateIndicator(id){
+        const ind = qs('ws-indicator');
+        if(!ind) return;
+        if(!id){ ind.textContent=''; return; }
+        try{
+          const resp = await window.StateApi.get(id);
+          const meta = resp && resp.meta ? resp.meta : {};
+          if(meta.published){
+            ind.textContent = meta.publishedToAll ? 'Published (All)' : 'Published';
+            ind.className = 'text-xs text-emerald-700 px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200';
+          }else{
+            ind.textContent = 'Private';
+            ind.className = 'text-xs text-slate-600 px-2 py-1 rounded-full bg-slate-50 border border-slate-200';
+          }
+        }catch(e){ ind.textContent=''; }
+      }
+
+      function fillSelect(sel, list, current){
+        if(!sel) return;
+        sel.innerHTML = (list||[]).map(d=>{
+          const id = String(d.id);
+          const name = d.name || d.id;
+          return `<option value="${esc(id)}">${esc(name)}</option>`;
+        }).join('') || `<option value="">No workspaces</option>`;
+        sel.value = current || (list && list[0] && list[0].id) || '';
+      }
+
+      async function initWorkspaces(){
+        const sel = qs('ws-select');
+        const current = dashId();
+        const dp = qs('dashPill');
+        if(dp) dp.textContent = current || '—';
+
+        // fast from cache
+        const cached = Cache.loadIndex();
+        if(cached && Array.isArray(cached.list) && cached.list.length){
+          fillSelect(sel, cached.list, current);
+        }
+
+        try{
+          const list = await window.StateApi.list();
+          Cache.saveIndex(list);
+          fillSelect(sel, list, current);
+
+          let chosen = sel.value || current;
+          if(!chosen && list.length) chosen = list[0].id;
+
+          if(chosen && chosen !== current) setDashInUrlNoReload(chosen);
+          if(dp) dp.textContent = chosen || '—';
+
+          await updateIndicator(chosen);
+
+          window.dispatchEvent(new CustomEvent('tw:workspaceChanged', {detail:{dash: chosen}}));
+        }catch(e){
+          toast('Failed to load workspaces: '+(e.message||String(e)),'error');
+        }
+
+        sel?.addEventListener('change', async (e)=>{
+          const id = e.target.value;
+          if(window.RunApp?.isDirty?.()) toast('Unsaved changes. Click Save if needed.','warn');
+          setDashInUrlNoReload(id);
+          await updateIndicator(id);
+          window.dispatchEvent(new CustomEvent('tw:workspaceChanged', {detail:{dash:id}}));
+        });
+      }
+
+      async function createWorkspace(){
+        const name = prompt('New workspace name:');
+        if(!name) return;
+        const id = 'dash-' + Math.random().toString(36).slice(2,8) + '-' + Date.now().toString(36);
+        const state = { __meta:{name}, executive:{bauData:{}}, run:{tickets:[], updatedAt:null} };
+        try{
+          await window.StateApi.save(id, state, name);
+          toast('Workspace created','ok');
+          setDashInUrlNoReload(id);
+          await initWorkspaces();
+        }catch(e){ toast('Create failed: '+(e.message||String(e)),'error'); }
+      }
+
+      async function renameWorkspace(){
+        const id = dashId();
+        if(!id){ toast('Select workspace first','error'); return; }
+        try{
+          const resp = await window.StateApi.get(id);
+          const current = resp?.name || id;
+          const name = prompt('Rename workspace:', current);
+          if(!name || name===current) return;
+          const st = resp?.state || {};
+          st.__meta ||= {};
+          st.__meta.name = name;
+          await window.StateApi.save(id, st, name);
+          toast('Renamed','ok');
+          await initWorkspaces();
+        }catch(e){ toast('Rename failed: '+(e.message||String(e)),'error'); }
+      }
+
+      async function deleteWorkspace(){
+        const id = dashId();
+        if(!id) return;
+        if(!confirm('Delete workspace '+id+'?')) return;
+        try{
+          await window.StateApi.remove(id);
+          toast('Deleted','ok');
+          setDashInUrlNoReload('');
+          await initWorkspaces();
+        }catch(e){ toast('Delete failed: '+(e.message||String(e)),'error'); }
+      }
+
+      function downloadText(filename, text){
+        const blob = new Blob([text], {type:'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 1000);
+      }
+
+      async function exportWorkspace(){
+        const id = dashId();
+        if(!id){ toast('Select workspace first','error'); return; }
+        try{
+          const resp = await window.StateApi.get(id);
+          downloadText((resp.name||id)+'-workspace.json', JSON.stringify(resp,null,2));
+          toast('Exported','ok');
+        }catch(e){ toast('Export failed: '+(e.message||String(e)),'error'); }
+      }
+
+      async function importWorkspace(file){
+        try{
+          const text = await file.text();
+          const data = JSON.parse(text);
+          const id = data.id || ('dash-'+Math.random().toString(36).slice(2,8));
+          const name = data.name || id;
+          const st = data.state || {};
+          await window.StateApi.save(id, st, name);
+          toast('Imported','ok');
+          setDashInUrlNoReload(id);
+          await initWorkspaces();
+        }catch(e){ toast('Import failed: '+(e.message||String(e)),'error'); }
+      }
+
+      async function openPublishModal(){
+        const id = dashId();
+        if(!id){ toast('Select workspace first','error'); return; }
+        const modal = qs('publishModal');
+        const box = qs('publishUsers');
+        const all = qs('publishAll');
+        if(!modal || !box || !all){ toast('Publish UI missing','error'); return; }
+
+        box.innerHTML = 'Loading…';
+        all.checked = false;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        try{
+          const r = await fetch('/api/users/list', {credentials:'same-origin', headers:{'Accept':'application/json'}});
+          const t = await r.text();
+          let j={}; try{ j=JSON.parse(t||'{}'); }catch(e){ j={}; }
+          const users = (j.users||[]).map(u=>u.userId).filter(Boolean);
+
+          box.innerHTML = users.map(u=>{
+            return `<label class="flex items-center justify-between px-2 py-1 border-b last:border-b-0">
+              <span class="font-mono text-xs">${esc(u)}</span>
+              <input type="checkbox" class="publishUser" value="${esc(u)}">
+            </label>`;
+          }).join('') || '<div class="text-xs text-slate-500">No users</div>';
+        }catch(e){
+          box.innerHTML = '<div class="text-xs text-red-600">Failed to load users</div>';
+        }
+      }
+
+      function closePublishModal(){
+        const m = qs('publishModal');
+        if(m){ m.classList.add('hidden'); m.classList.remove('flex'); }
+      }
+
+      async function doPublish(){
+        const id = dashId();
+        const all = qs('publishAll')?.checked || false;
+        const users = [];
+        qsa('.publishUser').forEach(ch=>{ if(ch.checked) users.push(ch.value); });
+
+        try{
+          await window.StateApi.publish(id, {all, users});
+          toast('Published','ok');
+          closePublishModal();
+          await updateIndicator(id);
+        }catch(e){ toast('Publish failed: '+(e.message||String(e)),'error'); }
+      }
+
+      async function doUnpublish(){
+        const id = dashId();
+        try{
+          await window.StateApi.unpublish(id);
+          toast('Unpublished','ok');
+          await updateIndicator(id);
+        }catch(e){ toast('Unpublish failed: '+(e.message||String(e)),'error'); }
+      }
+
+      function wireMenu(){
+        const btn = qs('ws-actions-btn');
+        const menu = qs('ws-actions-menu');
+        const back = qs('ws-actions-backdrop');
+
+        const open = ()=>{ menu?.classList.remove('hidden'); back?.classList.remove('hidden'); };
+        const close = ()=>{ menu?.classList.add('hidden'); back?.classList.add('hidden'); };
+
+        btn?.addEventListener('click', (e)=>{
+          e.preventDefault(); e.stopPropagation();
+          if(menu?.classList.contains('hidden')) open(); else close();
+        });
+        back?.addEventListener('click', close);
+        document.addEventListener('click', (e)=>{
+          if(menu && !menu.classList.contains('hidden')){
+            const inside = menu.contains(e.target) || (btn && btn.contains(e.target));
+            if(!inside) close();
+          }
+        });
+
+        menu?.addEventListener('click', async (e)=>{
+          const it = e.target.closest?.('[data-ws-action]');
+          if(!it) return;
+          e.preventDefault();
+          close();
+          const act = it.getAttribute('data-ws-action');
+
+          if(act==='generate') return window.RunApp?.openGenerate?.();
+          if(act==='downloadJpg') return window.RunApp?.download?.();
+          if(act==='new') return createWorkspace();
+          if(act==='rename') return renameWorkspace();
+          if(act==='save') return window.RunApp?.saveNow?.().catch(err=>toast(err.message||String(err),'error'));
+          if(act==='export') return exportWorkspace();
+          if(act==='import') return qs('ws-import-file')?.click();
+          if(act==='publish') return openPublishModal();
+          if(act==='unpublish') return doUnpublish();
+          if(act==='delete') return deleteWorkspace();
+        });
+      }
+
+      function init(){
+        qs('ws-import-file')?.addEventListener('change', (e)=>{
+          const f = e.target.files && e.target.files[0];
+          if(f) importWorkspace(f);
+          e.target.value='';
+        });
+
+        qs('publishClose')?.addEventListener('click', closePublishModal);
+        qs('publishCancel')?.addEventListener('click', closePublishModal);
+        qs('publishDo')?.addEventListener('click', doPublish);
+
+        window.addEventListener('tw:refreshIndicator', (e)=>{
+          const id = e.detail?.dash || dashId();
+          updateIndicator(id);
+        });
+
+        wireMenu();
+        initWorkspaces();
+      }
+
+      window.addEventListener('DOMContentLoaded', init);
+    })();
+
+  </script>
+</head>
+
+<body class="bg-white text-slate-900">
+  <div id="toast" class="hidden fixed top-4 right-4 z-[9999] text-white text-sm px-4 py-3 rounded-xl shadow-lg bg-slate-900"></div>
+
+  <div class="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+      <div class="min-w-0">
+        <div class="text-lg font-extrabold truncate">Run Dashboard</div>
+        <div class="text-xs text-slate-500 truncate">
+          Workspace: <span id="dashPill" class="font-mono">—</span> • <span id="filePill">No data loaded</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        <select id="ws-select" class="px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white">
+          <option value="">Loading…</option>
+        </select>
+
+        <span id="ws-indicator" class="text-xs text-slate-600 px-2 py-1 rounded-full bg-slate-50 border border-slate-200"></span>
+
+        <div class="relative">
+          <button id="ws-actions-btn" type="button" class="px-3 py-2 text-sm bg-slate-100 text-slate-800 rounded-xl hover:bg-slate-200 flex items-center gap-2">Actions</button>
+          <div id="ws-actions-backdrop" class="hidden fixed inset-0 z-40"></div>
+          <div id="ws-actions-menu" class="hidden absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden z-50">
+            <div class="p-2">
+              <button data-ws-action="generate" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Generate Report</button>
+              <button data-ws-action="downloadJpg" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Download JPG</button>
+              <div class="my-1 border-t"></div>
+              <button data-ws-action="new" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Create New</button>
+              <button data-ws-action="rename" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Rename</button>
+              <button data-ws-action="save" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Save</button>
+              <button data-ws-action="export" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Export</button>
+              <button data-ws-action="import" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Import</button>
+              <div class="my-1 border-t"></div>
+              <button data-ws-action="publish" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Publish</button>
+              <button data-ws-action="unpublish" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Unpublish</button>
+              <div class="my-1 border-t"></div>
+              <button data-ws-action="delete" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-red-50 text-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+
+        <input type="file" id="ws-import-file" accept="application/json" class="hidden" />
+
+        <div class="relative">
+          <button id="tw-menu-btn" class="w-10 h-10 rounded-xl bg-slate-900 text-white font-black flex items-center justify-center">☰</button>
+          <div id="tw-menu" class="hidden absolute right-0 mt-2 w-80 bg-white text-slate-900 border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
+            <div class="px-4 py-3 border-b bg-slate-50">
+              <div class="text-xs text-slate-500">Signed in as</div>
+              <div id="tw-userpill" class="mt-1 text-sm font-semibold">Checking…</div>
+            </div>
+            <div class="p-2">
+              <div class="px-2 pt-2 pb-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Navigation</div>
+              <a id="nav-build" href="/build.html" class="block px-3 py-2 rounded-xl hover:bg-slate-50 text-sm">🛠️ Build</a>
+              <a id="nav-run" href="/run.html" class="block px-3 py-2 rounded-xl hover:bg-slate-50 text-sm">▶️ Run</a>
+              <a id="tw-execboard" href="/executive-board.html" class="hidden block px-3 py-2 rounded-xl hover:bg-slate-50 text-sm">🗂️ Executive Board</a>
+            </div>
+            <div class="p-2 border-t">
+              <div class="px-2 pt-2 pb-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Account</div>
+              <a id="tw-usermgr" href="/user-manager.html" class="hidden block px-3 py-2 rounded-xl hover:bg-slate-50 text-sm">👥 User Manager</a>
+              <button id="tw-logout" class="w-full text-left px-3 py-2 rounded-xl hover:bg-red-50 text-sm text-red-700">⎋ Logout</button>
+            </div>
+          </div>
+        </div>
+
+        <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" class="hidden" />
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 py-6 space-y-6" id="captureRegion">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-xs text-slate-500">Total Tickets</div>
+        <div id="kpiTotal" class="mt-2 text-3xl font-extrabold">0</div>
+      </div>
+      <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+        <div class="text-xs text-emerald-700">On Time</div>
+        <div id="kpiOnTime" class="mt-2 text-3xl font-extrabold text-emerald-800">0</div>
+      </div>
+      <div class="rounded-2xl border border-red-200 bg-red-50 p-4">
+        <div class="text-xs text-red-700">Breached</div>
+        <div id="kpiBreached" class="mt-2 text-3xl font-extrabold text-red-800">0</div>
+      </div>
+      <div class="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+        <div class="text-xs text-indigo-700">SLA %</div>
+        <div id="kpiSla" class="mt-2 text-3xl font-extrabold text-indigo-800">0.0%</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-sm font-semibold mb-2">📊 SLA Overview</div>
+        <div class="h-72"><canvas id="pieChart"></canvas></div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="text-sm font-semibold mb-2">📈 Ticket Types</div>
+        <div class="h-72"><canvas id="barChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-slate-200 bg-white p-4" id="summaryTableSection">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="text-sm font-semibold">📋 Ticket Type Summary</div>
+        <button id="toggleTicketsBtn" type="button" class="text-xs px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100">Show Tickets</button>
+      </div>
+
+      <div id="summaryCards" class="grid grid-cols-1 gap-3 md:hidden mt-3"></div>
+
+      <div class="mt-3 overflow-x-auto hidden md:block">
+        <table class="min-w-[720px] w-full text-sm">
+          <thead class="text-slate-600">
+            <tr class="border-b">
+              <th class="py-2 text-left">Ticket Type</th>
+              <th class="py-2 text-center">Threshold (hrs)</th>
+              <th class="py-2 text-center">Total</th>
+              <th class="py-2 text-center">On Time</th>
+              <th class="py-2 text-center">Breached</th>
+              <th class="py-2 text-center">Avg Time</th>
+              <th class="py-2 text-center">SLA %</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="ticketsSection" class="hidden">
+      <div class="rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div class="text-sm font-semibold">Tickets</div>
+          <div class="flex gap-2 flex-wrap justify-end">
+            <button id="addTicketBtn" class="px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700">➕ Add Ticket</button>
+            <button id="clearTicketsBtn" class="px-3 py-2 rounded-xl bg-slate-100 text-slate-800 text-xs font-semibold hover:bg-slate-200">Clear</button>
+            <input id="searchBox" class="px-3 py-2 rounded-xl bg-white border border-slate-200 text-sm outline-none" placeholder="Search by ID / Title / Type…" />
+          </div>
+        </div>
+
+        <div class="mt-3 overflow-auto">
+          <table class="min-w-[900px] w-full text-sm">
+            <thead class="text-slate-600">
+              <tr class="border-b">
+                <th class="py-2 pr-3 text-left">ID</th>
+                <th class="py-2 pr-3 text-left">Title</th>
+                <th class="py-2 pr-3 text-left">Type</th>
+                <th class="py-2 pr-3 text-right">Hours</th>
+                <th class="py-2 pr-3 text-right">Threshold</th>
+                <th class="py-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="ticketTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Publish Modal -->
+  <div id="publishModal" class="hidden fixed inset-0 z-[9999] bg-black/40 items-center justify-center p-4">
+    <div class="w-full max-w-xl rounded-2xl bg-white border border-slate-200 shadow-xl p-5">
+      <div class="flex items-center justify-between">
+        <div class="text-sm font-semibold">Publish Workspace</div>
+        <button id="publishClose" class="text-slate-500 hover:text-slate-900">✕</button>
+      </div>
+      <div class="mt-3 text-sm text-slate-600">
+        <label class="flex items-center gap-2"><input type="checkbox" id="publishAll"> Publish to all users</label>
+      </div>
+      <div class="mt-3 rounded-xl border border-slate-200 max-h-56 overflow-auto" id="publishUsers"></div>
+      <div class="mt-4 flex justify-end gap-2">
+        <button id="publishCancel" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-800 text-sm">Cancel</button>
+        <button id="publishDo" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Publish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generate Modal -->
+  <div id="runModal" class="hidden fixed inset-0 z-[9999] bg-black/40 items-center justify-center p-4">
+    <div class="w-full max-w-xl rounded-2xl bg-white border border-slate-200 shadow-xl p-5">
+      <div class="flex items-center justify-between">
+        <div class="text-sm font-semibold">Generate Report</div>
+        <button id="runModalClose" class="text-slate-500 hover:text-slate-900">✕</button>
+      </div>
+
+      <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div class="rounded-xl border border-slate-200 p-3">
+          <div class="text-xs font-semibold text-slate-600 uppercase tracking-wider">Upload Excel/CSV</div>
+          <button id="uploadPick" class="mt-3 px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700">Choose File</button>
+        </div>
+        <div class="rounded-xl border border-slate-200 p-3">
+          <div class="text-xs font-semibold text-slate-600 uppercase tracking-wider">Azure DevOps</div>
+          <button id="adoOpenBtn" class="mt-3 px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800">Open ADO Form</button>
+        </div>
+      </div>
+
+      <div id="adoFormWrap" class="hidden mt-4 rounded-xl border border-slate-200 p-4">
+        <div class="text-sm font-semibold">Azure DevOps Details</div>
+        <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div>
+            <label class="text-xs text-slate-600">Organization</label>
+            <input id="adoOrg" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" placeholder="org or dev.azure.com/org" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-600">Project</label>
+            <input id="adoProject" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" placeholder="project name" />
+          </div>
+          <div class="md:col-span-2">
+            <label class="text-xs text-slate-600">Query ID</label>
+            <input id="adoQueryId" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 font-mono text-[12px]" placeholder="query GUID" />
+          </div>
+          <div class="md:col-span-2">
+            <label class="text-xs text-slate-600">PAT Token</label>
+            <input id="adoPat" type="password" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" placeholder="PAT" />
+          </div>
+        </div>
+        <div class="mt-3 flex justify-end gap-2">
+          <button id="adoCancel" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-800 text-sm">Cancel</button>
+          <button id="adoSubmit" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Sync & Load</button>
+        </div>
+        <div class="mt-2 text-[11px] text-slate-500">Note: ADO runs in browser and may fail if CORS is blocked.</div>
+      </div>
+
+      <div class="mt-5 flex justify-end gap-2">
+        <button id="runModalCancel" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-800 text-sm">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ticket CRUD Modal -->
+  <div id="ticketModal" class="hidden fixed inset-0 z-[9999] bg-black/40 items-center justify-center p-4">
+    <div class="w-full max-w-xl rounded-2xl bg-white border border-slate-200 shadow-xl p-5">
+      <div class="flex items-center justify-between">
+        <div id="ticketModalTitle" class="text-sm font-semibold">Add Ticket</div>
+        <button id="ticketModalClose" class="text-slate-500 hover:text-slate-900">✕</button>
+      </div>
+
+      <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <div>
+          <label class="text-xs text-slate-600">ID</label>
+          <input id="tId" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 font-mono" placeholder="ID" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-600">Type</label>
+          <select id="tType" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200">
+            <option>Small</option>
+            <option selected>Medium</option>
+            <option>Large</option>
+          </select>
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-600">Title</label>
+          <input id="tTitle" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" placeholder="Title" />
+        </div>
+
+        <div>
+          <label class="text-xs text-slate-600">Start Date & Time</label>
+          <input id="tStart" type="datetime-local" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-600">End Date & Time</label>
+          <input id="tEnd" type="datetime-local" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" />
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-600">Calculated Working Hours (9–18, Sat/Sun off)</label>
+          <input id="tActual" type="text" readonly class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50" />
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-600">Threshold (hrs)</label>
+          <input id="tThr" type="number" step="0.01" class="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200" value="6" />
+        </div>
+      </div>
+
+      <div class="mt-5 flex justify-end gap-2">
+        <button id="ticketCancel" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-800 text-sm">Cancel</button>
+        <button id="ticketSave" class="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Save Ticket</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // User menu toggle + auth init
+    (function(){
+      function toggle(el){ if(el) el.classList.toggle('hidden'); }
+      window.addEventListener('DOMContentLoaded', async function(){
+        await twInit();
+        const hb=qs('tw-menu-btn');
+        const hm=qs('tw-menu');
+        if(hb) hb.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); toggle(hm); });
+        document.addEventListener('click', function(e){
+          if(hm && !hm.classList.contains('hidden') && !(hm.contains(e.target) || hb.contains(e.target))) hm.classList.add('hidden');
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
