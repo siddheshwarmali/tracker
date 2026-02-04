@@ -269,12 +269,22 @@ p, span, label, h1, h2, h3, h4, h5, h6, td, th {
 }
 
 /* ---------- HEADER ACTION MENU ---------- */
-@media (max-width: 768px) {
-  #ws-actions-menu {
-    position: fixed !important;
-    inset: auto 0 0 0 !important;
-    border-radius: 16px 16px 0 0;
-    max-height: 85vh;
+@media (max-width: 640px) {
+  /* Ensure menus drop DOWN on mobile (Standard List View) */
+  #ws-actions-menu, #tw-menu {
+    position: absolute !important;
+    top: 100% !important; /* Force open below button */
+    bottom: auto !important;
+    left: auto !important;
+    right: 0 !important; /* Align to right edge */
+    transform: none !important;
+    margin-top: 0.5rem !important;
+    width: auto !important;
+    min-width: 220px !important; /* Ensure list is wide enough */
+    max-width: 90vw !important;
+    max-height: 60vh !important;
+    overflow-y: auto !important;
+    border-radius: 12px !important;
   }
 }
 
@@ -402,6 +412,15 @@ input[type="submit"] {
     height: 40px;
     padding: 0 0.75rem !important;
   }
+
+  /* Larger touch targets for mobile menus */
+  #ws-actions-menu button,
+  #tw-menu a,
+  #tw-menu button {
+    padding-top: 0.875rem !important;
+    padding-bottom: 0.875rem !important;
+    font-size: 1rem !important;
+  }
 }
 
 /* ---------- DESKTOP SAFETY ---------- */
@@ -438,7 +457,7 @@ input[type="submit"] {
                     <span id="ws-saved-indicator" class="text-xs text-gray-500 ml-2">Not saved</span>
 
       <!-- Publish/Private pill (optional, reused from Run ids) -->
-      <span id="ws-indicator" class="text-xs text-slate-600 px-2 py-1 rounded-full bg-slate-50 border border-slate-200"></span>
+      <span id="ws-indicator" class="text-xs text-slate-600 px-2 py-1 rounded-full bg-slate-50 border border-slate-200 ml-2"></span>
 
       <div class="relative">
   <button id="ws-actions-btn" type="button"
@@ -542,6 +561,9 @@ input[type="submit"] {
                 <div class="flex flex-col sm:flex-row sm:justify-end gap-3 mb-4 no-print mobile-stack-actions">
                     <button onclick="openReportModal()" class="flex items-center space-x-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition shadow-sm text-sm font-medium">
                         <i data-lucide="sliders-horizontal" class="w-4 h-4"></i><span>Customize View</span>
+                    </button>
+                    <button onclick="promptAddCustomTracker()" class="flex items-center space-x-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm text-sm font-medium">
+                        <i data-lucide="plus-square" class="w-4 h-4"></i><span>Add Tracker</span>
                     </button>
 </div>
 
@@ -709,6 +731,9 @@ input[type="submit"] {
                     </div>
                 </div>
 
+                <!-- Dynamic Custom Sections Container -->
+                <div id="custom-sections-container"></div>
+
                 <!-- 4. Blockers Section -->
                 <div id="section-blockers" class="mb-8 border-b pb-8 border-gray-200">
                     <div class="flex items-center justify-between mb-4">
@@ -818,7 +843,7 @@ input[type="submit"] {
     <div id="modal-us-details" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl h-[80vh] flex flex-col animate-fade-in">
             <div class="flex justify-between items-center mb-6"><div><h3 class="text-xl font-bold text-gray-800"><span id="us-modal-type-prefix">User Stories</span>: <span id="us-modal-stage" class="text-blue-600"></span></h3><p class="text-sm text-gray-500"><span id="us-modal-count">0</span> items in this stage</p></div><button onclick="closeModal('modal-us-details')"><i data-lucide="x" class="w-6 h-6 text-gray-500"></i></button></div>
-            <div class="flex-1 overflow-auto custom-scroll border rounded-lg"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50 sticky top-0"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stage</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ETA</th></tr></thead><tbody id="us-details-tbody" class="bg-white divide-y divide-gray-200"></tbody></table></div>
+            <div class="flex-1 overflow-auto custom-scroll border rounded-lg"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50 sticky top-0"><tr id="us-details-thead"></tr></thead><tbody id="us-details-tbody" class="bg-white divide-y divide-gray-200"></tbody></table></div>
             <div class="flex justify-end mt-6"><button onclick="closeModal('modal-us-details')" class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200">Close</button></div>
         </div>
     </div>
@@ -835,6 +860,7 @@ input[type="submit"] {
 
             <input type="hidden" id="usbug-datatype" />
             <input type="hidden" id="usbug-mode" />
+            <input type="hidden" id="usbug-tracker-id" />
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -863,6 +889,9 @@ input[type="submit"] {
                 </div>
             </div>
 
+            <div id="usbug-custom-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 border-t pt-4 hidden">
+            </div>
+
             <div class="flex items-center justify-between mt-6">
                 <button id="usbug-delete-btn" onclick="deleteUsBugFromModal()" class="px-4 py-2 bg-red-50 text-red-700 rounded-lg text-sm font-medium hover:bg-red-100 hidden">Delete</button>
                 <div class="flex gap-2 ml-auto">
@@ -870,6 +899,62 @@ input[type="submit"] {
                     <button onclick="saveUsBugFromModal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Save</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Add Custom Tracker Modal -->
+    <div id="modal-add-tracker" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md animate-fade-in">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-gray-800">Add New Tracker</h3>
+                <button onclick="closeModal('modal-add-tracker')"><i data-lucide="x" class="w-6 h-6 text-gray-500"></i></button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Tracker Title</label>
+                    <input type="text" id="new-tracker-title" class="w-full border border-gray-300 rounded-lg p-2" placeholder="e.g. Frontend Tasks">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Stages (comma separated)</label>
+                    <input type="text" id="new-tracker-stages" class="w-full border border-gray-300 rounded-lg p-2" value="To Do, In Progress, Done" placeholder="To Do, In Progress, Done">
+                    <p class="text-xs text-gray-500 mt-1">Define the columns for your workflow.</p>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+                <button onclick="closeModal('modal-add-tracker')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">Cancel</button>
+                <button onclick="saveNewTracker()" class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">Create Tracker</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configure Tracker Modal (Title, Stages, Fields) -->
+    <div id="modal-tracker-config" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl animate-fade-in flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 class="text-lg font-bold text-gray-800">Configure Tracker</h3>
+                <button onclick="closeModal('modal-tracker-config')"><i data-lucide="x" class="w-6 h-6 text-gray-500"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scroll p-1">
+                <input type="hidden" id="cfg-tracker-id">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tracker Title</label>
+                        <input type="text" id="cfg-tracker-title" class="w-full border border-gray-300 rounded-lg p-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Stages (comma separated)</label>
+                        <input type="text" id="cfg-tracker-stages" class="w-full border border-gray-300 rounded-lg p-2 text-sm">
+                    </div>
+                    <div class="border-t pt-4 mt-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="block text-sm font-bold text-gray-700">Custom Fields</label>
+                            <button onclick="addConfigField()" class="text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-100">+ Add Field</button>
+                        </div>
+                        <div id="cfg-fields-container" class="space-y-2"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-3 mt-4 pt-2 border-t"><button onclick="closeModal('modal-tracker-config')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">Cancel</button><button onclick="saveTrackerConfig()" class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">Save Configuration</button></div>
         </div>
     </div>
 
@@ -1025,6 +1110,7 @@ input[type="submit"] {
         let milestones = [];
         let userStories = [];
         let bugs = []; // Added for Bugs Tracker
+        let customTrackers = []; // [{ id, title, items: [] }]
         let blockers = [];
         let kpiData = [];
         let taskDisciplines = [
@@ -1045,6 +1131,7 @@ input[type="submit"] {
         let expandedDiscipline = 'ALL';
         let activeUsStage = 'New';
         let activeBugStage = 'New'; // Added for Bugs Tracker
+        let activeCustomStages = {}; // { trackerId: 'New' }
         let bauData = { totalTickets: 0, withinSLA: 0, breachedSLA: 0, slaPercentage: 0 };
         let showTrackerDetails = false;
         let showL2Details = false;
@@ -1053,6 +1140,7 @@ input[type="submit"] {
         const bugStages = ['New', 'Active', 'Resolved', 'Hold', 'Closed']; // Added for Bugs Tracker
         let savedSummaryText = null;
         let adoSyncSource = null;
+        let adoSyncTrackerId = null;
 
         // --- REPORTING LOGIC ---
         const reportSections = [
@@ -1067,8 +1155,14 @@ input[type="submit"] {
         ];
 
         function openReportModal() {
+            // Merge static sections with dynamic custom trackers
+            const allSections = [...reportSections];
+            customTrackers.forEach(ct => {
+                allSections.push({ id: 'section-' + ct.id, label: ct.title });
+            });
+
             const container = document.getElementById('report-toggles');
-            container.innerHTML = reportSections.map(s => {
+            container.innerHTML = allSections.map(s => {
                 const el = document.getElementById(s.id);
                 const isHidden = el ? el.classList.contains('hidden-by-report') : false;
                 return `
@@ -1082,14 +1176,18 @@ input[type="submit"] {
         }
 
         function selectAllSections(select) {
-            reportSections.forEach(s => {
+            const allSections = [...reportSections];
+            customTrackers.forEach(ct => allSections.push({ id: 'section-' + ct.id }));
+            allSections.forEach(s => {
                 const cb = document.getElementById(`toggle-${s.id}`);
                 if(cb) cb.checked = select;
             });
         }
 
         function applyReportView() {
-            reportSections.forEach(s => {
+            const allSections = [...reportSections];
+            customTrackers.forEach(ct => allSections.push({ id: 'section-' + ct.id }));
+            allSections.forEach(s => {
                 const cb = document.getElementById(`toggle-${s.id}`);
                 const el = document.getElementById(s.id);
                 if (el && cb) {
@@ -1202,7 +1300,7 @@ input[type="submit"] {
         }
 
         // --- FILE UPLOAD HANDLERS ---
-        function handleFileUpload(inp, type) {
+        function handleFileUpload(inp, type, trackerId = null) {
             const f = inp.files[0]; if(!f) return;
             const r = new FileReader();
             r.onload = e => {
@@ -1242,6 +1340,20 @@ input[type="submit"] {
                             };
                         }).filter(k => k.name && k.name !== 'Metric'); 
                         renderKPIs();
+                    }
+                    else if(type === 'custom' && trackerId) {
+                        const tracker = customTrackers.find(t => t.id === trackerId);
+                        if(tracker) {
+                            tracker.items = j.map(r => ({
+                                id: r['ID'] || r['id'] || generateUUID(),
+                                type: 'Task',
+                                description: r['Title'] || r['Description'] || r['title'] || '',
+                                stage: (tracker.stages && tracker.stages.includes(r['State']||r['Status'])) ? (r['State']||r['Status']) : (tracker.stages ? tracker.stages[0] : 'New'),
+                                owner: r['Owner'] || r['owner'] || '',
+                                eta: r['ETA'] || r['eta'] || '-'
+                            }));
+                            renderCustomTrackers();
+                        }
                     }
                     alert('Upload Successful!');
                 } catch(err) { alert('Upload Error: ' + err.message); }
@@ -1387,6 +1499,7 @@ input[type="submit"] {
             renderL2Details();
             renderUserStoryTiles();
             renderBugTiles();
+            renderCustomTrackers();
             renderBlockers();
             renderKPIs();
             renderBauStats();
@@ -1693,9 +1806,145 @@ input[type="submit"] {
             renderBugTiles();
         }
 
+        // --- CUSTOM TRACKERS (DYNAMIC) ---
+        function promptAddCustomTracker() {
+            document.getElementById('new-tracker-title').value = '';
+            document.getElementById('new-tracker-stages').value = 'To Do, In Progress, Done';
+            document.getElementById('modal-add-tracker').classList.add('open');
+        }
+
+        function saveNewTracker() {
+            const title = document.getElementById('new-tracker-title').value.trim();
+            const stagesStr = document.getElementById('new-tracker-stages').value.trim();
+            
+            if (!title) return alert("Please enter a tracker title.");
+            
+            const stages = stagesStr ? stagesStr.split(',').map(s => s.trim()).filter(s => s) : ["To Do", "In Progress", "Done"];
+            if (stages.length === 0) return alert("Please define at least one stage.");
+
+            const id = 'ct-' + Date.now();
+            customTrackers.push({ id, title, stages, items: [] });
+            activeCustomStages[id] = stages[0];
+            closeModal('modal-add-tracker');
+            renderCustomTrackers();
+            renderSummary();
+        }
+
+        function deleteCustomTracker(id) {
+            document.getElementById('delete-target-id').value = id;
+            document.getElementById('delete-type').value = 'custom-tracker';
+            document.querySelector('#modal-delete-confirm h3').innerText = 'Delete Tracker?';
+            document.querySelector('#modal-delete-confirm p').innerText = 'Delete this entire tracker and all its items? This cannot be undone.';
+            document.getElementById('modal-delete-confirm').classList.add('open');
+        }
+
+        function configureCustomTracker(id) {
+            const t = customTrackers.find(x => x.id === id);
+            if (!t) return;
+
+            document.getElementById('cfg-tracker-id').value = id;
+            document.getElementById('cfg-tracker-title').value = t.title;
+            document.getElementById('cfg-tracker-stages').value = (t.stages || []).join(', ');
+            
+            const container = document.getElementById('cfg-fields-container');
+            container.innerHTML = '';
+            (t.fields || []).forEach(f => addConfigField(f.name));
+            
+            document.getElementById('modal-tracker-config').classList.add('open');
+        }
+
+        function addConfigField(val = '') {
+            const div = document.createElement('div');
+            div.className = 'flex gap-2 items-center';
+            div.innerHTML = `
+                <input type="text" class="cfg-field-name flex-1 border border-gray-300 rounded p-2 text-sm" placeholder="Field Name (e.g. Cost)" value="${val}">
+                <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            `;
+            document.getElementById('cfg-fields-container').appendChild(div);
+            lucide.createIcons();
+        }
+
+        function saveTrackerConfig() {
+            const id = document.getElementById('cfg-tracker-id').value;
+            const t = customTrackers.find(x => x.id === id);
+            if (!t) return;
+
+            const title = document.getElementById('cfg-tracker-title').value.trim();
+            const stagesStr = document.getElementById('cfg-tracker-stages').value.trim();
+            
+            if (!title) return alert("Title required");
+            const stages = stagesStr.split(',').map(s => s.trim()).filter(s => s);
+            if (stages.length === 0) return alert("At least one stage required");
+
+            const fields = [];
+            document.querySelectorAll('.cfg-field-name').forEach(inp => {
+                if (inp.value.trim()) fields.push({ name: inp.value.trim(), type: 'text' });
+            });
+
+            t.title = title;
+            t.stages = stages;
+            t.fields = fields;
+            
+            if (!stages.includes(activeCustomStages[id])) activeCustomStages[id] = stages[0];
+            
+            closeModal('modal-tracker-config');
+            renderCustomTrackers();
+            renderSummary();
+        }
+
+        function renderCustomTrackers() {
+            const container = document.getElementById('custom-sections-container');
+            container.innerHTML = customTrackers.map(ct => {
+                const stages = ct.stages || ["To Do", "In Progress", "Done"];
+                const activeStage = activeCustomStages[ct.id] || stages[0];
+                const counts = {}; stages.forEach(s => counts[s] = 0);
+                ct.items.forEach(item => counts[item.stage] = (counts[item.stage]||0)+1);
+
+                const tilesHtml = stages.map(s => {
+                    const act = activeStage === s;
+                    return `<div onclick="setActiveCustomStage('${ct.id}', '${s}')" ondblclick="openDetailsModal('Custom', '${s}', '${ct.id}')" class="cursor-pointer rounded-lg p-4 border-2 transition-all ${act?'border-purple-500 bg-purple-50 shadow-sm':'border-gray-200 bg-white hover:border-purple-300'}"><div class="flex justify-between mb-2"><span class="text-sm font-bold ${act?'text-purple-700':'text-gray-600'}">${s}</span></div><div class="text-3xl font-extrabold text-gray-800">${counts[s]}</div><div class="text-xs text-gray-500 mt-1">Items</div></div>`;
+                }).join('');
+
+                return `
+                <div id="section-${ct.id}" class="mb-8 border-b pb-8 border-gray-200 animate-fade-in">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-xl font-semibold text-gray-700 flex items-center group cursor-pointer select-none" 
+                            ondblclick="toggleElement('controls-${ct.id}')" 
+                            title="Double-click to show/hide controls">
+                            <i data-lucide="kanban-square" class="w-5 h-5 mr-2 text-purple-600"></i>${ct.title}
+                            <button onclick="configureCustomTracker('${ct.id}')" class="ml-2 text-gray-400 hover:text-purple-600 transition-opacity" title="Configure Tracker"><i data-lucide="settings" class="w-4 h-4"></i></button>
+                        </h3>
+                        <div id="controls-${ct.id}" class="hidden flex items-center space-x-2 no-print animate-fade-in">
+                            <button onclick="configureCustomTracker('${ct.id}')" class="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg cursor-pointer hover:bg-gray-200 transition shadow-sm">
+                                <i data-lucide="settings" class="w-4 h-4"></i><span class="text-sm font-medium">Configure</span>
+                            </button>
+                            <button onclick="openAdoModal('custom', '${ct.id}')" class="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition shadow-sm">
+                                <i data-lucide="cloud-lightning" class="w-4 h-4"></i><span class="text-sm font-medium">Sync ADO</span>
+                            </button>
+                            <label class="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg cursor-pointer hover:bg-indigo-700 transition shadow-sm animate-fade-in">
+                                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i><span class="text-sm font-medium">Upload Excel</span>
+                                <input type="file" accept=".xlsx,.xls" onchange="handleFileUpload(this, 'custom', '${ct.id}')" class="hidden" />
+                            </label>
+                            <button onclick="openUsBugModal('Custom', null, '${activeStage}', '${ct.id}')" class="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg cursor-pointer hover:bg-purple-700 transition shadow-sm"><i data-lucide="plus" class="w-4 h-4"></i><span class="text-sm font-medium">Add Item</span></button>
+                            <button onclick="deleteCustomTracker('${ct.id}')" class="flex items-center justify-center px-3 py-2 bg-red-100 text-red-700 rounded-lg cursor-pointer hover:bg-red-200 transition shadow-sm" title="Delete Section">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg p-4 border border-gray-200 shadow-sm"><div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">${tilesHtml}</div><p class="text-xs text-gray-400 text-center mt-3 no-print">Double-click on a tile to view details</p></div>
+                </div>`;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        function setActiveCustomStage(trackerId, stage) {
+            activeCustomStages[trackerId] = stage;
+            renderCustomTrackers();
+        }
+
         // --- GENERIC DETAILS MODAL ---
-        function openDetailsModal(dataType, stage) {
-            window.__detailsContext = { dataType, stage };
+        function openDetailsModal(dataType, stage, trackerId = null) {
+            window.__detailsContext = { dataType, stage, trackerId };
 
             let items = [];
             let prefix = "";
@@ -1703,6 +1952,13 @@ input[type="submit"] {
                 prefix = "User Stories";
                 items = userStories.filter(s => s.stage === stage);
                 activeUsStage = stage;
+            } else if (dataType === 'Custom') {
+                const tracker = customTrackers.find(t => t.id === trackerId);
+                if (tracker) {
+                    prefix = tracker.title;
+                    items = tracker.items.filter(i => i.stage === stage);
+                    activeCustomStages[trackerId] = stage;
+                }
             } else {
                 prefix = "Bugs Tracker";
                 items = stage === 'Total' ? bugs : bugs.filter(b => b.stage === stage);
@@ -1712,30 +1968,54 @@ input[type="submit"] {
             document.getElementById('us-modal-type-prefix').innerText = prefix;
             document.getElementById('us-modal-stage').innerText = stage;
             document.getElementById('us-modal-count').innerText = items.length;
+            
+            const thead = document.getElementById('us-details-thead');
             const tbody = document.getElementById('us-details-tbody');
 
+            // Build Headers
+            let headers = ['ID', 'Type', 'Title', 'Stage'];
+            let customFields = [];
+            
+            if (dataType === 'Custom' && trackerId) {
+                const tracker = customTrackers.find(t => t.id === trackerId);
+                if (tracker && tracker.fields) {
+                    customFields = tracker.fields;
+                    headers.push(...customFields.map(f => f.name));
+                }
+            }
+            headers.push('Owner', 'ETA', 'Actions');
+            
+            thead.innerHTML = headers.map(h => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">${h}</th>`).join('');
+
             if (items.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-500">No items found</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="${headers.length}" class="p-8 text-center text-gray-500">No items found</td></tr>`;
             } else {
                 tbody.innerHTML = items.map(s => {
                     const dt = (dataType === 'US') ? 'US' : 'Bug';
                     const badgeClass = (dt === 'US') ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800';
-                    return `
-                        <tr class="hover:bg-gray-50 text-xs transition-colors">
-                            <td class="px-6 py-4 font-medium">${s.id}</td>
+                    
+                    let rowHtml = `<td class="px-6 py-4 font-medium">${s.id}</td>
                             <td class="px-6 py-4"><span class="bg-gray-100 border rounded px-1">${s.type}</span></td>
                             <td class="px-6 py-4 truncate max-w-xs" title="${s.description}">${s.description}</td>
-                            <td class="px-6 py-4"><span class="${badgeClass} px-2 py-1 rounded-full">${s.stage}</span></td>
-                            <td class="px-6 py-4">${s.owner}</td>
+                            <td class="px-6 py-4"><span class="${badgeClass} px-2 py-1 rounded-full">${s.stage}</span></td>`;
+                    
+                    if (dataType === 'Custom') {
+                        customFields.forEach(f => {
+                            const val = (s.custom && s.custom[f.name]) ? s.custom[f.name] : '-';
+                            rowHtml += `<td class="px-6 py-4">${val}</td>`;
+                        });
+                    }
+                    
+                    rowHtml += `<td class="px-6 py-4">${s.owner}</td>
                             <td class="px-6 py-4">${s.eta}</td>
                             <td class="px-6 py-4">
                                 <div class="flex items-center gap-2">
-                                    <button class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100" onclick="openUsBugModal('${dt}', '${s.id}', '${s.stage}')">Edit</button>
-                                    <button class="px-2 py-1 bg-red-50 text-red-700 rounded hover:bg-red-100" onclick="deleteUsBug('${dt}', '${s.id}')">Delete</button>
+                                    <button class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100" onclick="openUsBugModal('${dataType}', '${s.id}', '${s.stage}', '${trackerId||''}')">Edit</button>
+                                    <button class="px-2 py-1 bg-red-50 text-red-700 rounded hover:bg-red-100" onclick="deleteUsBug('${dataType}', '${s.id}', '${trackerId||''}')">Delete</button>
                                 </div>
-                            </td>
-                        </tr>
-                    `;
+                            </td>`;
+                            
+                    return `<tr class="hover:bg-gray-50 text-xs transition-colors">${rowHtml}</tr>`;
                 }).join('');
             }
             document.getElementById('modal-us-details').classList.add('open');
@@ -1744,41 +2024,76 @@ input[type="submit"] {
         
 
         // --- CRUD for User Stories & Bugs ---
-        function openUsBugModal(dataType, id = null, stagePref = null) {
+        function openUsBugModal(dataType, id = null, stagePref = null, trackerId = null) {
             const isUS = (dataType === 'US');
-            const list = isUS ? userStories : bugs;
-            const stages = isUS ? usStages : bugStages;
+            const isCustom = (dataType === 'Custom');
+            let list = isUS ? userStories : bugs;
+            let customStages = null;
+            let customFields = [];
+
+            if (isCustom) {
+                const t = customTrackers.find(ct => ct.id === trackerId);
+                list = t ? t.items : [];
+                customStages = t ? t.stages : ["To Do", "In Progress", "Done"];
+                customFields = t ? t.fields || [] : [];
+            }
+
+            const stages = isCustom ? customStages : (isUS ? usStages : bugStages);
 
             const mode = id ? 'edit' : 'new';
             document.getElementById('usbug-datatype').value = dataType;
             document.getElementById('usbug-mode').value = mode;
+            document.getElementById('usbug-tracker-id').value = trackerId || '';
 
             const stageSel = document.getElementById('usbug-stage');
             stageSel.innerHTML = stages.map(s => `<option value="${s}">${s}</option>`).join('');
 
             const delBtn = document.getElementById('usbug-delete-btn');
             delBtn.classList.toggle('hidden', mode !== 'edit');
+            
+            const customContainer = document.getElementById('usbug-custom-fields');
+            customContainer.innerHTML = '';
+            if (isCustom && customFields.length > 0) {
+                customContainer.classList.remove('hidden');
+                customFields.forEach(f => {
+                    const div = document.createElement('div');
+                    div.innerHTML = `<label class="block text-xs font-medium text-gray-600 mb-1">${f.name}</label>
+                                     <input type="text" data-custom-field="${f.name}" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="${f.name}">`;
+                    customContainer.appendChild(div);
+                });
+            } else {
+                customContainer.classList.add('hidden');
+            }
 
             if (mode === 'edit') {
                 const item = list.find(x => String(x.id) === String(id));
                 if (!item) { showAlert('Item not found', 'error'); return; }
-                document.getElementById('usbug-modal-title').innerText = isUS ? 'Edit User Story' : 'Edit Bug';
+                document.getElementById('usbug-modal-title').innerText = isCustom ? 'Edit Item' : (isUS ? 'Edit User Story' : 'Edit Bug');
                 document.getElementById('usbug-id').value = item.id || '';
-                document.getElementById('usbug-type').value = item.type || (isUS ? 'User Story' : 'Bug');
+                document.getElementById('usbug-type').value = item.type || (isUS ? 'User Story' : (isCustom ? 'Task' : 'Bug'));
                 document.getElementById('usbug-desc').value = item.description || '';
                 stageSel.value = item.stage || stages[0];
                 document.getElementById('usbug-owner').value = item.owner || '';
                 const eta = item.eta || '';
                 document.getElementById('usbug-eta').value = (/^\d{4}-\d{2}-\d{2}$/.test(eta) ? eta : '');
+                
+                // Populate custom fields
+                if (isCustom && item.custom) {
+                    customFields.forEach(f => {
+                        const inp = customContainer.querySelector(`[data-custom-field="${f.name}"]`);
+                        if (inp) inp.value = item.custom[f.name] || '';
+                    });
+                }
             } else {
-                document.getElementById('usbug-modal-title').innerText = isUS ? 'Add User Story' : 'Add Bug';
-                const idPrefix = isUS ? 'US-' : 'BUG-';
+                document.getElementById('usbug-modal-title').innerText = isCustom ? 'Add Item' : (isUS ? 'Add User Story' : 'Add Bug');
+                const idPrefix = isUS ? 'US-' : (isCustom ? 'TASK-' : 'BUG-');
                 document.getElementById('usbug-id').value = idPrefix + generateUUID().slice(0, 8);
-                document.getElementById('usbug-type').value = isUS ? 'User Story' : 'Bug';
+                document.getElementById('usbug-type').value = isUS ? 'User Story' : (isCustom ? 'Task' : 'Bug');
                 document.getElementById('usbug-desc').value = '';
-                stageSel.value = stagePref || (isUS ? (activeUsStage || stages[0]) : (activeBugStage || stages[0]));
+                stageSel.value = stagePref || (isCustom ? (activeCustomStages[trackerId] || stages[0]) : (isUS ? (activeUsStage || stages[0]) : (activeBugStage || stages[0])));
                 document.getElementById('usbug-owner').value = '';
                 document.getElementById('usbug-eta').value = '';
+                // Custom fields are already empty
             }
 
             document.getElementById('modal-usbug').classList.add('open');
@@ -1787,11 +2102,20 @@ input[type="submit"] {
 
         function saveUsBugFromModal() {
             const dataType = document.getElementById('usbug-datatype').value;
+            const trackerId = document.getElementById('usbug-tracker-id').value;
             const isUS = (dataType === 'US');
-            const list = isUS ? userStories : bugs;
+            const isCustom = (dataType === 'Custom');
+            let customFields = [];
+            let list = isUS ? userStories : bugs;
+            if (isCustom) {
+                const t = customTrackers.find(ct => ct.id === trackerId);
+                if (!t) return showAlert('Tracker not found', 'error');
+                list = t.items;
+                customFields = t.fields || [];
+            }
 
             const id = document.getElementById('usbug-id').value.trim();
-            const type = document.getElementById('usbug-type').value.trim() || (isUS ? 'User Story' : 'Bug');
+            const type = document.getElementById('usbug-type').value.trim() || (isUS ? 'User Story' : (isCustom ? 'Task' : 'Bug'));
             const description = document.getElementById('usbug-desc').value.trim();
             const stage = document.getElementById('usbug-stage').value;
             const owner = document.getElementById('usbug-owner').value.trim();
@@ -1802,40 +2126,56 @@ input[type="submit"] {
 
             const existingIdx = list.findIndex(x => String(x.id) === String(id));
             const obj = { id, type, description, stage, owner, eta };
+            
+            if (isCustom) {
+                obj.custom = {};
+                customFields.forEach(f => {
+                    const inp = document.querySelector(`[data-custom-field="${f.name}"]`);
+                    if (inp) obj.custom[f.name] = inp.value;
+                });
+            }
 
             if (existingIdx >= 0) list[existingIdx] = Object.assign({}, list[existingIdx], obj);
             else list.push(obj);
 
-            showAlert(isUS ? 'User Story saved' : 'Bug saved', 'success');
+            showAlert('Item saved', 'success');
             closeModal('modal-usbug');
             if (typeof renderAll === 'function') renderAll();
 
             if (window.__detailsContext && document.getElementById('modal-us-details').classList.contains('open')) {
-                openDetailsModal(window.__detailsContext.dataType, window.__detailsContext.stage);
+                openDetailsModal(window.__detailsContext.dataType, window.__detailsContext.stage, window.__detailsContext.trackerId);
             }
         }
 
-        function deleteUsBug(dataType, id) {
+        function deleteUsBug(dataType, id, trackerId = null) {
             const isUS = (dataType === 'US');
-            const list = isUS ? userStories : bugs;
+            const isCustom = (dataType === 'Custom');
+            let list = isUS ? userStories : bugs;
+            if (isCustom) {
+                const t = customTrackers.find(ct => ct.id === trackerId);
+                if (!t) return;
+                list = t.items;
+            }
+
             const idx = list.findIndex(x => String(x.id) === String(id));
             if (idx < 0) return;
 
-            if (!confirm(`Delete ${isUS ? 'User Story' : 'Bug'}: ${id}? This cannot be undone.`)) return;
+            if (!confirm(`Delete item ${id}? This cannot be undone.`)) return;
             list.splice(idx, 1);
-            showAlert(isUS ? 'User Story deleted' : 'Bug deleted', 'success');
+            showAlert('Deleted', 'success');
 
             if (typeof renderAll === 'function') renderAll();
             if (window.__detailsContext && document.getElementById('modal-us-details').classList.contains('open')) {
-                openDetailsModal(window.__detailsContext.dataType, window.__detailsContext.stage);
+                openDetailsModal(window.__detailsContext.dataType, window.__detailsContext.stage, window.__detailsContext.trackerId);
             }
         }
 
         function deleteUsBugFromModal() {
             const dataType = document.getElementById('usbug-datatype').value;
+            const trackerId = document.getElementById('usbug-tracker-id').value;
             const id = document.getElementById('usbug-id').value.trim();
             closeModal('modal-usbug');
-            deleteUsBug(dataType, id);
+            deleteUsBug(dataType, id, trackerId);
         }
 function renderBlockers() {
             document.getElementById('blocker-count').innerText = blockers.filter(b=>!b.resolved).length;
@@ -1889,6 +2229,11 @@ function renderBlockers() {
             if(idx !== '') {
                 if(type === 'blocker') { blockers.splice(idx, 1); renderBlockers(); } 
                 else if (type === 'kpi') { kpiData.splice(idx, 1); renderKPIs(); }
+                else if (type === 'custom-tracker') {
+                    customTrackers = customTrackers.filter(ct => ct.id !== idx);
+                    renderCustomTrackers();
+                    renderSummary();
+                }
             }
             closeModal('modal-delete-confirm');
         }
@@ -1978,7 +2323,7 @@ function renderBlockers() {
         function toggleL2Details(disc) { if (disc === 'ALL') expandedDiscipline = expandedDiscipline === 'ALL' ? null : 'ALL'; else expandedDiscipline = expandedDiscipline === disc ? null : disc; renderDisciplineTable(); renderL2Details(); }
         function renderL2EditMode() { const content = document.getElementById('disc-tab-content'); let html = `<div class="bg-gray-50 p-4 rounded mb-4 border border-gray-200"><div class="flex justify-between mb-2"><h4 class="font-bold text-sm text-gray-700">Manage Columns</h4><button onclick="addL2Col()" class="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100">+ Add Column</button></div><div class="flex flex-wrap gap-2">${l2Columns.map((c, i) => `<div class="flex items-center bg-white border rounded"><input value="${c.name}" onchange="updL2ColName(${i},this.value)" class="p-1 text-xs w-20 outline-none rounded-l focus:ring-1 focus:ring-teal-500"><button onclick="delL2Col(${i})" class="text-red-500 px-2 hover:bg-red-50 border-l">×</button></div>`).join('')}</div></div><div class="space-y-4">`; Object.keys(l2Data).forEach(disc => { html += `<div class="border rounded p-3"><div class="flex justify-between mb-2"><h5 class="font-bold text-sm text-gray-700">${disc}</h5><button onclick="addL2Row('${disc}')" class="text-xs text-teal-700 bg-teal-50 px-2 py-1 rounded border border-teal-100 hover:bg-teal-100">+ Add Row</button></div><table class="w-full text-xs"><thead><tr><th class="text-left font-medium text-gray-500">Feature</th>${l2Columns.map(c=>`<th class="text-center font-medium text-gray-500">${c.name}</th>`).join('')}<th></th></tr></thead><tbody>${l2Data[disc].map((r, ri) => `<tr><td class="p-1"><input value="${r.feature||''}" onchange="updL2Cell('${disc}',${ri},'feature',this.value)" class="w-full border p-1 rounded"></td>${l2Columns.map(c => `<td class="p-1"><input value="${r[c.id]||''}" onchange="updL2Cell('${disc}',${ri},'${c.id}',this.value)" class="w-full border p-1 rounded text-center"></td>`).join('')}<td class="p-1 text-right"><button onclick="delL2Row('${disc}',${ri})" class="text-red-500 hover:text-red-700">×</button></td></tr>`).join('')}</tbody></table></div>`; }); html += `</div>`; content.innerHTML = html; }
 
-        function openAdoModal(source = 'build') { adoSyncSource = source; document.getElementById('modal-ado').classList.add('open'); document.getElementById('ado-error').classList.add('hidden'); }
+        function openAdoModal(source = 'build', trackerId = null) { adoSyncSource = source; adoSyncTrackerId = trackerId; document.getElementById('modal-ado').classList.add('open'); document.getElementById('ado-error').classList.add('hidden'); }
 
         async function handleAdoSync() {
             const org = document.getElementById('ado-org').value.trim();
@@ -2020,6 +2365,32 @@ function renderBlockers() {
                         const f = item.fields; return { id: String(item.id), type: 'Bug', description: f['System.Title'], stage: normalizeBugStage(f['System.State']), owner: f['System.AssignedTo']?.displayName || 'Unassigned', eta: '-' };
                     });
                     renderBugTiles();
+                } else if (adoSyncSource === 'custom' && adoSyncTrackerId) {
+                    const tracker = customTrackers.find(t => t.id === adoSyncTrackerId);
+                    if (tracker) {
+                        tracker.items = detailsData.value.map(item => {
+                            const f = item.fields; 
+                            const obj = { id: String(item.id), type: 'Task', description: f['System.Title'], stage: (tracker.stages && tracker.stages.includes(f['System.State'])) ? f['System.State'] : (tracker.stages ? tracker.stages[0] : 'New'), owner: f['System.AssignedTo']?.displayName || 'Unassigned', eta: '-' };
+                            
+                            // Map custom fields based on title
+                            if (tracker.fields) {
+                                obj.custom = {};
+                                tracker.fields.forEach(cf => {
+                                    const name = cf.name;
+                                    const lower = name.toLowerCase();
+                                    let val = '';
+                                    if (lower.includes('priority')) val = f['Microsoft.VSTS.Common.Priority'];
+                                    else if (lower.includes('tag')) val = f['System.Tags'];
+                                    else if (lower.includes('area')) val = f['System.AreaPath'];
+                                    else if (lower.includes('iteration')) val = f['System.IterationPath'];
+                                    else if (lower.includes('severity')) val = f['Microsoft.VSTS.Common.Severity'];
+                                    obj.custom[name] = (val !== undefined && val !== null) ? val : '';
+                                });
+                            }
+                            return obj;
+                        });
+                        renderCustomTrackers();
+                    }
                 } else {
                     userStories = detailsData.value.map(item => {
                         const f = item.fields; return { id: String(item.id), type: f['System.WorkItemType'], description: f['System.Title'], stage: normalizeStage(f['System.State']), owner: f['System.AssignedTo']?.displayName || 'Unassigned', eta: '-' };
@@ -2035,6 +2406,20 @@ function renderBlockers() {
             const mockBugs = [ { id: 'B01', type: 'Bug', description: 'API Timeout', stage: 'New', owner: 'Alice', eta: '-' }, { id: 'B02', type: 'Bug', description: 'Button misalignment', stage: 'Active', owner: 'Bob', eta: '-' } ];
             if (adoSyncSource === 'bugs') { bugs = mockBugs; renderBugTiles(); } 
             else if (adoSyncSource === 'run') { document.getElementById('run-iframe').contentWindow.postMessage({ type: 'ADO_DATA_FOR_RUN', payload: [ { id: '201', title: 'Update Links', type: 'Small', actualTime: 2.5, threshold: 4 } ] }, '*'); } 
+            else if (adoSyncSource === 'custom' && adoSyncTrackerId) {
+                const tracker = customTrackers.find(t => t.id === adoSyncTrackerId);
+                if (tracker) {
+                    const mockItem = { id: 'C01', type: 'Task', description: 'Custom Task 1', stage: tracker.stages[0], owner: 'Demo', eta: '-' };
+                    if (tracker.fields) {
+                        mockItem.custom = {};
+                        tracker.fields.forEach(f => {
+                            mockItem.custom[f.name] = `Mock ${f.name}`;
+                        });
+                    }
+                    tracker.items = [ mockItem ];
+                    renderCustomTrackers();
+                }
+            }
             else { userStories = mockStories; renderUserStoryTiles(); }
             closeModal('modal-ado');
         }
@@ -2076,6 +2461,7 @@ function renderBlockers() {
             let summary = [];
             if (milestones.length > 0) { const completed = milestones.filter(m => calculateStatus(m).status === 'completed').length; summary.push(`Project execution is at ${Math.round((completed / milestones.length) * 100)}% completion.`); }
             if (bugs.length > 0) { summary.push(`Currently tracking ${bugs.length} total bugs, with ${bugs.filter(b=>b.stage==='New').length} new and ${bugs.filter(b=>b.stage==='Active').length} active issues.`); }
+            if (customTrackers.length > 0) { summary.push(`Tracking ${customTrackers.length} custom workstreams.`); }
             if (bauData.totalTickets > 0) { summary.push(`SLA performance is at ${bauData.slaPercentage}%.`); }
             return summary.length === 0 ? "No sufficient data. Double-click here to write your own." : summary.join("\n\n");
         }
@@ -2209,6 +2595,7 @@ function renderBlockers() {
                 milestones: wsSafeClone(typeof milestones !== 'undefined' ? milestones : []),
                 userStories: wsSafeClone(typeof userStories !== 'undefined' ? userStories : []),
                 bugs: wsSafeClone(typeof bugs !== 'undefined' ? bugs : []),
+                customTrackers: wsSafeClone(typeof customTrackers !== 'undefined' ? customTrackers : []),
                 blockers: wsSafeClone(typeof blockers !== 'undefined' ? blockers : []),
                 kpiData: wsSafeClone(typeof kpiData !== 'undefined' ? kpiData : []),
                 taskDisciplines: wsSafeClone(typeof taskDisciplines !== 'undefined' ? taskDisciplines : []),
@@ -2221,12 +2608,14 @@ function renderBlockers() {
                 expandedDiscipline: (typeof expandedDiscipline !== 'undefined' ? expandedDiscipline : 'ALL'),
                 activeUsStage: (typeof activeUsStage !== 'undefined' ? activeUsStage : 'New'),
                 activeBugStage: (typeof activeBugStage !== 'undefined' ? activeBugStage : 'New'),
+                activeCustomStages: wsSafeClone(typeof activeCustomStages !== 'undefined' ? activeCustomStages : {}),
                 bauData: wsSafeClone(typeof bauData !== 'undefined' ? bauData : { totalTickets: 0, withinSLA: 0, breachedSLA: 0, slaPercentage: 0 }),
                 showTrackerDetails: (typeof showTrackerDetails !== 'undefined' ? showTrackerDetails : false),
                 showL2Details: (typeof showL2Details !== 'undefined' ? showL2Details : false),
                 discModalTab: (typeof discModalTab !== 'undefined' ? discModalTab : 'L1'),
                 savedSummaryText: (typeof savedSummaryText !== 'undefined' ? savedSummaryText : null),
                 adoSyncSource: (typeof adoSyncSource !== 'undefined' ? adoSyncSource : null),
+                adoSyncTrackerId: (typeof adoSyncTrackerId !== 'undefined' ? adoSyncTrackerId : null),
                 selectedTab: wsGetSelectedTab(),
                 reportVisibility: wsGetReportVisibility(),
                 adoConfig: { organization: adoOrg, project: adoProject, queryId: adoQueryId }
@@ -2250,6 +2639,7 @@ function renderBlockers() {
                 if (typeof milestones !== 'undefined') milestones = wsSafeClone(ex.milestones || []);
                 if (typeof userStories !== 'undefined') userStories = wsSafeClone(ex.userStories || []);
                 if (typeof bugs !== 'undefined') bugs = wsSafeClone(ex.bugs || []);
+                if (typeof customTrackers !== 'undefined') customTrackers = wsSafeClone(ex.customTrackers || []);
                 if (typeof blockers !== 'undefined') blockers = wsSafeClone(ex.blockers || []);
                 if (typeof kpiData !== 'undefined') kpiData = wsSafeClone(ex.kpiData || []);
                 if (typeof taskDisciplines !== 'undefined') taskDisciplines = wsSafeClone(ex.taskDisciplines || taskDisciplines);
@@ -2261,12 +2651,14 @@ function renderBlockers() {
                 if (typeof expandedDiscipline !== 'undefined') expandedDiscipline = ex.expandedDiscipline || 'ALL';
                 if (typeof activeUsStage !== 'undefined') activeUsStage = ex.activeUsStage || 'New';
                 if (typeof activeBugStage !== 'undefined') activeBugStage = ex.activeBugStage || 'New';
+                if (typeof activeCustomStages !== 'undefined') activeCustomStages = wsSafeClone(ex.activeCustomStages || {});
                 if (typeof bauData !== 'undefined') bauData = wsSafeClone(ex.bauData || bauData);
                 if (typeof showTrackerDetails !== 'undefined') showTrackerDetails = !!ex.showTrackerDetails;
                 if (typeof showL2Details !== 'undefined') showL2Details = !!ex.showL2Details;
                 if (typeof discModalTab !== 'undefined') discModalTab = ex.discModalTab || 'L1';
                 if (typeof savedSummaryText !== 'undefined') savedSummaryText = (typeof ex.savedSummaryText !== 'undefined' ? ex.savedSummaryText : null);
                 if (typeof adoSyncSource !== 'undefined') adoSyncSource = ex.adoSyncSource || null;
+                if (typeof adoSyncTrackerId !== 'undefined') adoSyncTrackerId = ex.adoSyncTrackerId || null;
 
                 // Restore Headless ticket data
                 try {
@@ -2553,6 +2945,7 @@ function renderBlockers() {
             addJsonSheet('Milestones', exec.milestones);
             addJsonSheet('UserStories', exec.userStories);
             addJsonSheet('Bugs', exec.bugs);
+            if(exec.customTrackers) exec.customTrackers.forEach(ct => addJsonSheet('Tracker_'+ct.title, ct.items));
             addJsonSheet('Blockers', exec.blockers);
             addJsonSheet('KPIs', exec.kpiData);
             addJsonSheet('Disciplines_L1', exec.taskDisciplines);
@@ -2900,6 +3293,7 @@ function gh6BlankState(name) {
     st.executive.milestones = [];
     st.executive.userStories = [];
     st.executive.bugs = [];
+    st.executive.customTrackers = [];
     st.executive.blockers = [];
     st.executive.kpiData = [];
     st.executive.pendingDisciplineData = [];
@@ -2931,11 +3325,13 @@ function gh6BlankState(name) {
     st.executive.expandedDiscipline = 'ALL';
     st.executive.activeUsStage = 'New';
     st.executive.activeBugStage = 'New';
+    st.executive.activeCustomStages = {};
     st.executive.showTrackerDetails = false;
     st.executive.showL2Details = false;
     st.executive.discModalTab = 'L1';
     st.executive.savedSummaryText = null;
     st.executive.adoSyncSource = null;
+    st.executive.adoSyncTrackerId = null;
     st.executive.adoConfig = { organization:'', project:'', queryId:'' };
 
     st.headless.loadedTicketData = null;
@@ -3019,6 +3415,7 @@ async function wsSelectWorkspace(id, { saveCurrent=true, force=false } = {}) {
         if (seq !== gh6LoadSeq || wsCurrentId !== id) return;
 
         try { window.wsCurrentMeta = data.meta || {}; } catch(e) {}
+        try { if(window.wsUpdatePublishUI) window.wsUpdatePublishUI(window.wsCurrentMeta); } catch(e) {}
  // ignore stale response
 
         const state = data.state ? gh6SanitizeState(data.state) : null;
@@ -3026,6 +3423,7 @@ async function wsSelectWorkspace(id, { saveCurrent=true, force=false } = {}) {
             wsApplyState(state, { silent:false });
             wsLastSerialized = wsStableSerializeState(wsGetState());
             wsSetIndicator('Loaded ✓', true);
+            setTimeout(() => { const el=document.getElementById('ws-saved-indicator'); if(el && el.textContent.includes('Loaded')) el.textContent=''; }, 3000);
 
             // Cache locally so if fetch fails later, we can still restore
             try {
@@ -3743,8 +4141,8 @@ async function wsModalPrimary() {
     if (pill){
       pill.textContent = published ? 'Published' : 'Private';
       pill.className = published
-        ? 'text-xs text-green-700 px-2 py-1 rounded-full bg-green-50 border border-green-200'
-        : 'text-xs text-slate-600 px-2 py-1 rounded-full bg-slate-50 border border-slate-200';
+        ? 'text-xs text-green-700 px-2 py-1 rounded-full bg-green-50 border border-green-200 ml-2'
+        : 'text-xs text-slate-600 px-2 py-1 rounded-full bg-slate-50 border border-slate-200 ml-2';
     }
     const btnPub = document.getElementById('ws-action-publish') || document.querySelector('[data-ws-action="publish"]');
     const btnUnp = document.getElementById('ws-action-unpublish') || document.querySelector('[data-ws-action="unpublish"]');
@@ -3766,10 +4164,10 @@ async function wsModalPrimary() {
     if (!pill) return;
     if (isPublic) {
       pill.textContent = 'Published';
-      pill.className = 'text-xs px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-200';
+      pill.className = 'text-xs px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 ml-2';
     } else {
       pill.textContent = 'Private';
-      pill.className = 'text-xs px-2 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200';
+      pill.className = 'text-xs px-2 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200 ml-2';
     }
   }
 
@@ -3818,8 +4216,8 @@ async function wsModalPrimary() {
     const isPublic = state && (state.published === true || state.isPublic === true);
     pill().textContent = isPublic ? 'Published' : 'Private';
     pill().className = isPublic
-      ? 'text-xs px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-200'
-      : 'text-xs px-2 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200';
+      ? 'text-xs px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 ml-2'
+      : 'text-xs px-2 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200 ml-2';
   }
 
   // 1) Update immediately when publish/unpublish buttons are used
@@ -3833,8 +4231,8 @@ async function wsModalPrimary() {
 
   // 2) On reload: wait until workspace state is actually available
   function waitForState() {
-    if (window.wsState) {
-      render(window.wsState);
+    if (window.wsCurrentMeta && Object.keys(window.wsCurrentMeta).length > 0) {
+      render(window.wsCurrentMeta);
       return;
     }
     setTimeout(waitForState, 150);
@@ -3843,92 +4241,6 @@ async function wsModalPrimary() {
   document.addEventListener('DOMContentLoaded', waitForState);
 })();
 </script>
-
-
-<!-- ================== DYNAMIC SECTIONS (BUILT-IN) ================== -->
-<div class="mt-10">
-  <div class="flex justify-between items-center mb-3">
-    <h2 class="text-xl font-bold">Dynamic Sections</h2>
-    <div class="flex gap-2">
-      <button onclick="addDynamicSection('Bug Tracker')" class="px-3 py-2 bg-red-600 text-white rounded-lg text-sm">+ Bug Tracker</button>
-      <button onclick="addDynamicSection('User Stories')" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm">+ User Stories</button>
-      <button onclick="addDynamicSection('Custom')" class="px-3 py-2 bg-green-600 text-white rounded-lg text-sm">+ Custom</button>
-    </div>
-  </div>
-  <div id="dynamic-section-host"></div>
-</div>
-
-<script>
-/* ===== FULLY INTEGRATED DYNAMIC ENGINE ===== */
-(function(){
-  function ws(){ return window.wsActive || window.__WS__; }
-  function dyn(){
-    const w=ws(); if(!w) return null;
-    w.state=w.state||{}; w.state.dynamic=w.state.dynamic||{sections:{}};
-    return w.state.dynamic;
-  }
-  function save(){ if(window.wsSaveCurrentWorkspace) wsSaveCurrentWorkspace(); }
-  function me(){ return window.twMe||{role:'viewer',userId:'unknown'}; }
-  function admin(){ return me().role==='admin'; }
-  function canEdit(o){ if(admin()) return true; if(o.locked) return false; return o.createdBy===me().userId; }
-
-  window.addDynamicSection=function(type){
-    const d=dyn(); if(!d) return;
-    const id='dyn_'+Date.now();
-    d.sections[id]={id,type,title:type,createdBy:me().userId,locked:false,tiles:{}};
-    save(); render();
-  };
-
-  window.toggleDynLock=function(id){
-    if(!admin()) return;
-    dyn().sections[id].locked=!dyn().sections[id].locked;
-    save(); render();
-  };
-
-  window.addDynTile=function(secId,type){
-    const d=dyn();
-    const tid='tile_'+Date.now();
-    d.sections[secId].tiles[tid]={id:tid,type,title:type,value:'',createdBy:me().userId,locked:false};
-    save(); render();
-  };
-
-  function render(){
-    const h=document.getElementById('dynamic-section-host'); if(!h) return;
-    const d=dyn(); if(!d) return;
-    h.innerHTML='';
-    Object.values(d.sections).forEach(s=>{
-      const el=document.createElement('div');
-      el.className='bg-white border rounded-xl p-4 mb-4';
-      el.innerHTML=`
-        <div class="flex justify-between mb-2">
-          <h3 contenteditable="${canEdit(s)}"
-              onblur="wsActive.state.dynamic.sections['${s.id}'].title=this.innerText;wsSaveCurrentWorkspace()"
-              class="text-lg font-semibold">${s.title}</h3>
-          ${admin()?`<button onclick="toggleDynLock('${s.id}')" class="text-xs border px-2 py-1 rounded">${s.locked?'Unlock':'Lock'}</button>`:''}
-        </div>
-        <div class="flex gap-2 mb-3">
-          <button onclick="addDynTile('${s.id}','Text')" class="text-xs bg-indigo-600 text-white px-2 py-1 rounded">+ Text</button>
-          <button onclick="addDynTile('${s.id}','Number')" class="text-xs bg-indigo-600 text-white px-2 py-1 rounded">+ Number</button>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          ${Object.values(s.tiles).map(t=>`
-            <div class="border p-3 rounded">
-              <h4 contenteditable="${canEdit(t)}"
-                  onblur="wsActive.state.dynamic.sections['${s.id}'].tiles['${t.id}'].title=this.innerText;wsSaveCurrentWorkspace()"
-                  class="font-medium text-sm">${t.title}</h4>
-              <div contenteditable="${canEdit(t)}"
-                   onblur="wsActive.state.dynamic.sections['${s.id}'].tiles['${t.id}'].value=this.innerText;wsSaveCurrentWorkspace()"
-                   class="text-sm mt-1">${t.value||'Edit content'}</div>
-            </div>`).join('')}
-        </div>`;
-      h.appendChild(el);
-    });
-  }
-
-  document.addEventListener('DOMContentLoaded',()=>setTimeout(render,800));
-})();
-</script>
-<!-- ================== /DYNAMIC SECTIONS ================== -->
 
 </body>
 </html>
