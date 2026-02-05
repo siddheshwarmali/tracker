@@ -673,64 +673,6 @@ input[type="submit"] {
                     </div>
                 </div>
 
-                <!-- 3. User Story Section -->
-                <div id="section-user-stories" class="mb-8 border-b pb-8 border-gray-200">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="text-xl font-semibold text-gray-700 flex items-center cursor-pointer select-none hover:text-indigo-600"
-                            onclick="handleHeaderClick(() => toggleElement('us-action-controls'), null)"
-                            title="Double-click to toggle upload button">
-                            <i data-lucide="list" class="w-5 h-5 mr-2 text-indigo-600"></i>User Story Tracker
-                        </h3>
-                        <div id="us-action-controls" class="flex items-center space-x-2 no-print hidden">
-                             <button onclick="openAdoModal()" class="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition shadow-sm">
-                                <i data-lucide="cloud-lightning" class="w-4 h-4"></i><span class="text-sm font-medium">Sync ADO</span>
-                            </button>
-                            <button onclick="openUsBugModal('US', null, activeUsStage || usStages[0])" class="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg cursor-pointer hover:bg-indigo-700 transition shadow-sm">
-                                <i data-lucide="plus" class="w-4 h-4"></i><span class="text-sm font-medium">Add Story</span>
-                            </button>
-                            <div id="us-upload-controls">
-                                <label class="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg cursor-pointer hover:bg-indigo-700 transition shadow-sm animate-fade-in">
-                                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i><span class="text-sm font-medium">Upload Excel</span>
-                                    <input type="file" accept=".xlsx,.xls" onchange="handleFileUpload(this, 'stories')" class="hidden" />
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4" id="us-tiles"></div>
-                        <p class="text-xs text-gray-400 text-center mt-3 no-print">Double-click on a tile to view detailed User Stories</p>
-                    </div>
-                </div>
-
-                <!-- 3.5 Bugs Tracker Section -->
-                <div id="section-bugs" class="mb-8 border-b pb-8 border-gray-200">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="text-xl font-semibold text-gray-700 flex items-center cursor-pointer select-none hover:text-red-600"
-                            onclick="handleHeaderClick(() => toggleElement('bug-action-controls'), null)"
-                            title="Double-click to toggle upload button">
-                            <i data-lucide="bug" class="w-5 h-5 mr-2 text-red-600"></i>Bugs Tracker
-                        </h3>
-                        <div id="bug-action-controls" class="flex items-center space-x-2 no-print hidden">
-                             <button onclick="openAdoModal('bugs')" class="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition shadow-sm">
-                                <i data-lucide="cloud-lightning" class="w-4 h-4"></i><span class="text-sm font-medium">Sync ADO</span>
-                            </button>
-                            <button onclick="openUsBugModal('Bug', null, activeBugStage || bugStages[0])" class="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg cursor-pointer hover:bg-red-700 transition shadow-sm">
-                                <i data-lucide="plus" class="w-4 h-4"></i><span class="text-sm font-medium">Add Bug</span>
-                            </button>
-                            <div id="bug-upload-controls">
-                                <label class="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg cursor-pointer hover:bg-red-700 transition shadow-sm animate-fade-in">
-                                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i><span class="text-sm font-medium">Upload Excel</span>
-                                    <input type="file" accept=".xlsx,.xls" onchange="handleFileUpload(this, 'bugs')" class="hidden" />
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4" id="bug-tiles"></div>
-                        <p class="text-xs text-gray-400 text-center mt-3 no-print">Double-click on a tile to view detailed Bugs</p>
-                    </div>
-                </div>
-
                 <!-- Dynamic Custom Sections Container -->
                 <div id="custom-sections-container"></div>
 
@@ -943,7 +885,11 @@ input[type="submit"] {
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Stages (comma separated)</label>
-                        <input type="text" id="cfg-tracker-stages" class="w-full border border-gray-300 rounded-lg p-2 text-sm">
+                        <input type="text" id="cfg-tracker-stages" class="w-full border border-gray-300 rounded-lg p-2 text-sm" oninput="updateStageColorInputs()">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Stage Colors</label>
+                        <div id="cfg-stage-colors" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
                     </div>
                     <div class="border-t pt-4 mt-4">
                         <div class="flex justify-between items-center mb-2">
@@ -1134,6 +1080,7 @@ input[type="submit"] {
         let activeCustomStages = {}; // { trackerId: 'New' }
         let bauData = { totalTickets: 0, withinSLA: 0, breachedSLA: 0, slaPercentage: 0 };
         let showTrackerDetails = false;
+        let currentStageColors = {}; // Temp storage for config modal
         let showL2Details = false;
         let discModalTab = 'L1';
         const usStages = ['New', 'Development', 'Authoring', 'IT UAT', 'Business UAT', 'Closed'];
@@ -1147,8 +1094,6 @@ input[type="submit"] {
             { id: 'summary-section', label: 'Overall Summary' },
             { id: 'section-milestones', label: 'Project Milestones' },
             { id: 'section-discipline', label: 'Task Discipline' },
-            { id: 'section-user-stories', label: 'User Stories' },
-            { id: 'section-bugs', label: 'Bugs Tracker' }, // Added to reporting
             { id: 'section-blockers', label: 'Active Blockers' },
             { id: 'section-kpi', label: 'KPIs' },
             { id: 'section-bau', label: 'BAU Update' }
@@ -1497,8 +1442,6 @@ input[type="submit"] {
             renderMilestoneDetails();
             renderDisciplineTable();
             renderL2Details();
-            renderUserStoryTiles();
-            renderBugTiles();
             renderCustomTrackers();
             renderBlockers();
             renderKPIs();
@@ -1769,6 +1712,7 @@ input[type="submit"] {
         // --- USER STORY TRACKER ---
         function renderUserStoryTiles() {
             const container = document.getElementById('us-tiles');
+            if (!container) return;
             const counts = {}; usStages.forEach(s=>counts[s]=0);
             userStories.forEach(s=>counts[s.stage] = (counts[s.stage]||0)+1);
             container.innerHTML = usStages.map(s => {
@@ -1787,6 +1731,7 @@ input[type="submit"] {
         // --- BUGS TRACKER (NEW) ---
         function renderBugTiles() {
             const container = document.getElementById('bug-tiles');
+            if (!container) return;
             const counts = {}; bugStages.forEach(s=>counts[s]=0);
             bugs.forEach(b=>counts[b.stage] = (counts[b.stage]||0)+1);
             
@@ -1846,11 +1791,33 @@ input[type="submit"] {
             document.getElementById('cfg-tracker-title').value = t.title;
             document.getElementById('cfg-tracker-stages').value = (t.stages || []).join(', ');
             
+            currentStageColors = Object.assign({}, t.stageColors || {});
+            updateStageColorInputs();
+            
             const container = document.getElementById('cfg-fields-container');
             container.innerHTML = '';
             (t.fields || []).forEach(f => addConfigField(f.name));
             
             document.getElementById('modal-tracker-config').classList.add('open');
+        }
+
+        function updateStageColorInputs() {
+            const str = document.getElementById('cfg-tracker-stages').value;
+            const stages = str.split(',').map(s => s.trim()).filter(s => s);
+            const container = document.getElementById('cfg-stage-colors');
+            
+            // Preserve values
+            container.querySelectorAll('input[type="color"]').forEach(inp => {
+                if(inp.dataset.stage) currentStageColors[inp.dataset.stage] = inp.value;
+            });
+
+            container.innerHTML = stages.map(s => {
+                const color = currentStageColors[s] || '#6366f1';
+                return `<div class="flex items-center gap-2 text-xs bg-gray-50 p-2 rounded border border-gray-200">
+                    <input type="color" data-stage="${s}" value="${color}" class="w-6 h-6 p-0 border-0 rounded cursor-pointer bg-transparent" onchange="currentStageColors['${s}']=this.value">
+                    <span class="truncate font-medium text-gray-700">${s}</span>
+                </div>`;
+            }).join('');
         }
 
         function addConfigField(val = '') {
@@ -1881,9 +1848,16 @@ input[type="submit"] {
                 if (inp.value.trim()) fields.push({ name: inp.value.trim(), type: 'text' });
             });
 
+            // Capture final colors
+            const stageColors = {};
+            document.getElementById('cfg-stage-colors').querySelectorAll('input[type="color"]').forEach(inp => {
+                stageColors[inp.dataset.stage] = inp.value;
+            });
+
             t.title = title;
             t.stages = stages;
             t.fields = fields;
+            t.stageColors = stageColors;
             
             if (!stages.includes(activeCustomStages[id])) activeCustomStages[id] = stages[0];
             
@@ -1902,7 +1876,13 @@ input[type="submit"] {
 
                 const tilesHtml = stages.map(s => {
                     const act = activeStage === s;
-                    return `<div onclick="setActiveCustomStage('${ct.id}', '${s}')" ondblclick="openDetailsModal('Custom', '${s}', '${ct.id}')" class="cursor-pointer rounded-lg p-4 border-2 transition-all ${act?'border-purple-500 bg-purple-50 shadow-sm':'border-gray-200 bg-white hover:border-purple-300'}"><div class="flex justify-between mb-2"><span class="text-sm font-bold ${act?'text-purple-700':'text-gray-600'}">${s}</span></div><div class="text-3xl font-extrabold text-gray-800">${counts[s]}</div><div class="text-xs text-gray-500 mt-1">Items</div></div>`;
+                    const color = (ct.stageColors && ct.stageColors[s]) ? ct.stageColors[s] : '#6366f1';
+                    
+                    // Dynamic styles based on user color
+                    const style = `border-color: ${color}; background-color: ${act ? color + '15' : '#ffffff'}; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);`;
+                    const textStyle = `color: ${color};`;
+
+                    return `<div onclick="setActiveCustomStage('${ct.id}', '${s}')" ondblclick="openDetailsModal('Custom', '${s}', '${ct.id}')" class="cursor-pointer rounded-lg p-4 border-2 transition-all" style="${style}"><div class="flex justify-between mb-2"><span class="text-sm font-bold" style="${textStyle}">${s}</span></div><div class="text-3xl font-extrabold text-gray-800">${counts[s]}</div><div class="text-xs text-gray-500 mt-1">Items</div></div>`;
                 }).join('');
 
                 return `
@@ -2458,12 +2438,69 @@ function renderBlockers() {
         }
 
         function calculateAutoSummary() {
-            let summary = [];
-            if (milestones.length > 0) { const completed = milestones.filter(m => calculateStatus(m).status === 'completed').length; summary.push(`Project execution is at ${Math.round((completed / milestones.length) * 100)}% completion.`); }
-            if (bugs.length > 0) { summary.push(`Currently tracking ${bugs.length} total bugs, with ${bugs.filter(b=>b.stage==='New').length} new and ${bugs.filter(b=>b.stage==='Active').length} active issues.`); }
-            if (customTrackers.length > 0) { summary.push(`Tracking ${customTrackers.length} custom workstreams.`); }
-            if (bauData.totalTickets > 0) { summary.push(`SLA performance is at ${bauData.slaPercentage}%.`); }
-            return summary.length === 0 ? "No sufficient data. Double-click here to write your own." : summary.join("\n\n");
+            let sections = [];
+
+            // 1. Project Health (Milestones)
+            if (milestones.length > 0) {
+                const total = milestones.length;
+                const completed = milestones.filter(m => calculateStatus(m).status === 'completed').length;
+                const delayed = milestones.filter(m => calculateStatus(m).tracker === 'Delayed').length;
+                const pct = Math.round((completed / total) * 100);
+                
+                let msg = `PROJECT HEALTH: ${pct}% Complete`;
+                if (delayed > 0) msg += `\n⚠️ CRITICAL: ${delayed} milestone(s) are currently delayed and impacting timeline.`;
+                else if (pct === 100) msg += `\n✅ All milestones completed successfully.`;
+                else msg += `\nProject is progressing with ${total - completed} milestones remaining.`;
+                sections.push(msg);
+            }
+
+            // 2. Risks (Blockers)
+            const activeBlockers = blockers.filter(b => !b.resolved);
+            if (activeBlockers.length > 0) {
+                const high = activeBlockers.filter(b => (b.severity||'').toLowerCase() === 'high').length;
+                let msg = `RISKS & BLOCKERS: ${activeBlockers.length} Active`;
+                if (high > 0) msg += `\n🚨 ACTION REQUIRED: ${high} High-severity blocker(s) need immediate resolution.`;
+                else msg += `\n${activeBlockers.length} blockers are currently being addressed.`;
+                sections.push(msg);
+            }
+
+            // 3. Task Execution (Disciplines)
+            let openTasks = 0;
+            let bottleneck = { name: '', count: -1 };
+            taskDisciplines.forEach(d => {
+                openTasks += (d.openTasks || 0);
+                if (d.openTasks > bottleneck.count) { bottleneck.name = d.discipline; bottleneck.count = d.openTasks; }
+            });
+            
+            if (openTasks > 0) {
+                let msg = `TASK EXECUTION: ${openTasks} Open Tasks`;
+                if (bottleneck.count > 0) msg += `\n📉 Bottleneck detected in ${bottleneck.name} with ${bottleneck.count} open items.`;
+                sections.push(msg);
+            }
+
+            // 4. Quality (Bugs)
+            if (bugs.length > 0) {
+                const active = bugs.filter(b => ['New', 'Active'].includes(b.stage)).length;
+                if (active > 0) sections.push(`QUALITY ASSURANCE:\n🐛 ${active} active defects being tracked.`);
+            }
+
+            // 5. Custom Workstreams
+            if (customTrackers.length > 0) {
+                const updates = customTrackers.map(ct => {
+                    const active = ct.items.filter(i => !['Done','Closed','Resolved'].includes(i.stage)).length;
+                    return `• ${ct.title}: ${active} active items`;
+                });
+                sections.push(`WORKSTREAMS:\n${updates.join('\n')}`);
+            }
+
+            // 6. BAU
+            if (bauData.totalTickets > 0) {
+                sections.push(`OPERATIONS (BAU):\n${bauData.slaPercentage}% SLA Adherence (${bauData.breachedSLA} breaches recorded).`);
+            }
+
+            if (sections.length === 0) return "Insufficient data to generate executive summary. Please add project data.";
+            
+            return sections.join('\n\n');
         }
 
         function renderSummary() {
@@ -3528,6 +3565,11 @@ async function wsSaveNowToGitHub() {
 // Override create workspace: always create blank (reset) and save
 async function wsCreateWorkspace(name, baseState=null) {
     const store = wsLoadStore();
+    // Check for duplicate name
+    const existing = Object.values(store.workspaces || {}).find(w => w.name && w.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (existing) {
+        throw new Error(`Workspace "${name}" already exists.`);
+    }
     const id = (typeof generateUUID === 'function') ? generateUUID() : ('ws-' + Date.now());
     const now = new Date().toISOString();
 
@@ -3644,18 +3686,28 @@ async function wsModalPrimary() {
         try {
             await wsCreateWorkspace(name);
             wsSetIndicator(`Created: ${name}`, true);
+            wsCloseModal();
         } catch(e) {
             console.error(e);
-            wsSetIndicator('Create failed (see console)', false);
+            wsSetIndicator('Create failed', false);
+            alert(e.message);
         }
     } else if (wsModalMode === 'rename') {
         const store = wsLoadStore();
         if (!wsModalTargetId || !store.workspaces[wsModalTargetId]) return;
+        
+        const existing = Object.values(store.workspaces || {}).find(w => w.name && w.name.trim().toLowerCase() === name.trim().toLowerCase() && w.id !== wsModalTargetId);
+        if (existing) {
+            alert(`Workspace "${name}" already exists.`);
+            return;
+        }
+
         store.workspaces[wsModalTargetId].name = name;
         store.workspaces[wsModalTargetId].updatedAt = new Date().toISOString();
         wsSaveStore(store);
         wsRefreshSelect();
         wsSetIndicator(`Renamed: ${name}`, true);
+        wsCloseModal();
     } else if (wsModalMode === 'duplicate') {
         const store = wsLoadStore();
         if (!wsModalTargetId || !store.workspaces[wsModalTargetId]) return;
@@ -3663,13 +3715,13 @@ async function wsModalPrimary() {
         try {
             await wsCreateWorkspace(name, base.state);
             wsSetIndicator(`Duplicated: ${name}`, true);
+            wsCloseModal();
         } catch(e) {
             console.error(e);
-            wsSetIndicator('Duplicate failed (see console)', false);
+            wsSetIndicator('Duplicate failed', false);
+            alert(e.message);
         }
     }
-
-    wsCloseModal();
 }
 </script>
 
