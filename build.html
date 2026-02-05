@@ -1070,6 +1070,7 @@ input[type="submit"] {
         let activeUsStage = 'New';
         let activeBugStage = 'New'; // Added for Bugs Tracker
         let activeCustomStages = {}; // { trackerId: 'New' }
+        let activeCustomGroupValues = {};
         let bauData = { totalTickets: 0, withinSLA: 0, breachedSLA: 0, slaPercentage: 0 };
         let showTrackerDetails = false;
         let currentStageColors = {}; // Temp storage for config modal
@@ -1760,7 +1761,7 @@ input[type="submit"] {
             if (stages.length === 0) return alert("Please define at least one stage.");
 
             const id = 'ct-' + Date.now();
-            customTrackers.push({ id, title, stages, items: [] });
+            customTrackers.push({ id, title, stages, items: [], groupBy: 'stage' });
             activeCustomStages[id] = stages[0];
             closeModal('modal-add-tracker');
             renderCustomTrackers();
@@ -1773,6 +1774,16 @@ input[type="submit"] {
             document.querySelector('#modal-delete-confirm h3').innerText = 'Delete Tracker?';
             document.querySelector('#modal-delete-confirm p').innerText = 'Delete this entire tracker and all its items? This cannot be undone.';
             document.getElementById('modal-delete-confirm').classList.add('open');
+        }
+
+        function setTrackerGroupBy(trackerId, field) {
+            const tracker = customTrackers.find(t => t.id === trackerId);
+            if (tracker) {
+                tracker.groupBy = field;
+                // Reset active selection when group changes
+                activeCustomStages[trackerId] = null; 
+                renderCustomTrackers();
+            }
         }
 
         function configureCustomTracker(id) {
@@ -1820,6 +1831,7 @@ input[type="submit"] {
                 <select class="cfg-field-type border border-gray-300 rounded p-2 text-sm w-28 bg-white">
                     <option value="text" ${type==='text'?'selected':''}>Text</option>
                     <option value="date" ${type==='date'?'selected':''}>Date</option>
+                    <option value="datetime" ${type==='datetime'?'selected':''}>Date & Time</option>
                     <option value="area" ${type==='area'?'selected':''}>Text Area</option>
                 </select>
                 <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
@@ -1868,20 +1880,42 @@ input[type="submit"] {
         function renderCustomTrackers() {
             const container = document.getElementById('custom-sections-container');
             container.innerHTML = customTrackers.map(ct => {
-                const stages = ct.stages || ["To Do", "In Progress", "Done"];
-                const activeStage = activeCustomStages[ct.id] || stages[0];
-                const counts = {}; stages.forEach(s => counts[s] = 0);
-                ct.items.forEach(item => counts[item.stage] = (counts[item.stage]||0)+1);
+                const groupByField = ct.groupBy || 'stage';
+                const isGroupingByStage = groupByField === 'stage';
 
-                const tilesHtml = stages.map(s => {
-                    const act = activeStage === s;
-                    const color = (ct.stageColors && ct.stageColors[s]) ? ct.stageColors[s] : '#6366f1';
+                let groupValues = [];
+                if (isGroupingByStage) {
+                    groupValues = ct.stages || ["To Do", "In Progress", "Done"];
+                } else {
+                    const values = new Set();
+                    ct.items.forEach(item => {
+                        const val = item.custom && item.custom[groupByField] ? item.custom[groupByField] : 'Unassigned';
+                        values.add(val);
+                    });
+                    groupValues = Array.from(values).sort();
+                }
+
+                const activeGroupValue = activeCustomStages[ct.id] || (groupValues.length > 0 ? groupValues[0] : null);
+
+                const counts = {}; 
+                groupValues.forEach(v => counts[v] = 0);
+                
+                ct.items.forEach(item => {
+                    let itemValue = isGroupingByStage ? item.stage : (item.custom && item.custom[groupByField] ? item.custom[groupByField] : 'Unassigned');
+                    if (counts.hasOwnProperty(itemValue)) {
+                         counts[itemValue]++;
+                    }
+                });
+
+                const tilesHtml = groupValues.map(groupValue => {
+                    const act = activeGroupValue === groupValue;
+                    const color = (isGroupingByStage && ct.stageColors && ct.stageColors[groupValue]) ? ct.stageColors[groupValue] : '#6366f1';
                     
                     // Dynamic styles based on user color
                     const style = `border-color: ${color}; background-color: ${act ? color + '15' : '#ffffff'}; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);`;
                     const textStyle = `color: ${color};`;
 
-                    return `<div onclick="setActiveCustomStage('${ct.id}', '${s}')" ondblclick="openDetailsModal('Custom', '${s}', '${ct.id}')" class="cursor-pointer rounded-lg p-4 border-2 transition-all" style="${style}"><div class="flex justify-between mb-2"><span class="text-sm font-bold" style="${textStyle}">${s}</span></div><div class="text-3xl font-extrabold text-gray-800">${counts[s]}</div><div class="text-xs text-gray-500 mt-1">Items</div></div>`;
+                    return `<div onclick="setActiveCustomGroupValue('${ct.id}', '${groupValue}')" ondblclick="openDetailsModalForGroup('${ct.id}', '${groupByField}', '${groupValue}')" class="cursor-pointer rounded-lg p-4 border-2 transition-all" style="${style}"><div class="flex justify-between mb-2"><span class="text-sm font-bold" style="${textStyle}">${groupValue}</span></div><div class="text-3xl font-extrabold text-gray-800">${counts[groupValue]}</div><div class="text-xs text-gray-500 mt-1">Items</div></div>`;
                 }).join('');
 
                 return `
@@ -1894,6 +1928,7 @@ input[type="submit"] {
                             <button onclick="configureCustomTracker('${ct.id}')" class="ml-2 text-gray-400 hover:text-purple-600 transition-opacity" title="Configure Tracker"><i data-lucide="settings" class="w-4 h-4"></i></button>
                         </h3>
                         <div id="controls-${ct.id}" class="hidden flex items-center space-x-2 no-print animate-fade-in">
+                            <div class="flex items-center text-xs"><span class="text-gray-500 mr-1">Group by:</span><select onchange="setTrackerGroupBy('${ct.id}', this.value)" class="text-xs border-gray-300 rounded p-1 bg-white"><option value="stage" ${groupByField === 'stage' ? 'selected' : ''}>State</option>${(ct.fields || []).map(f => `<option value="${f.name}" ${groupByField === f.name ? 'selected' : ''}>${f.name}</option>`).join('')}</select></div>
                             <button onclick="openAdoModal('custom', '${ct.id}')" class="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 transition shadow-sm">
                                 <i data-lucide="cloud-lightning" class="w-4 h-4"></i><span class="text-sm font-medium">Sync ADO</span>
                             </button>
@@ -1901,7 +1936,7 @@ input[type="submit"] {
                                 <i data-lucide="file-spreadsheet" class="w-4 h-4"></i><span class="text-sm font-medium">Upload Excel</span>
                                 <input type="file" accept=".xlsx,.xls" onchange="handleFileUpload(this, 'custom', '${ct.id}')" class="hidden" />
                             </label>
-                            <button onclick="openUsBugModal('Custom', null, '${activeStage}', '${ct.id}')" class="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg cursor-pointer hover:bg-purple-700 transition shadow-sm"><i data-lucide="plus" class="w-4 h-4"></i><span class="text-sm font-medium">Add Item</span></button>
+                            <button onclick="openUsBugModal('Custom', null, ${isGroupingByStage ? "'" + activeGroupValue + "'" : 'null'}, '${ct.id}')" class="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg cursor-pointer hover:bg-purple-700 transition shadow-sm"><i data-lucide="plus" class="w-4 h-4"></i><span class="text-sm font-medium">Add Item</span></button>
                             <button onclick="deleteCustomTracker('${ct.id}')" class="flex items-center justify-center px-3 py-2 bg-red-100 text-red-700 rounded-lg cursor-pointer hover:bg-red-200 transition shadow-sm" title="Delete Section">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
@@ -1913,8 +1948,8 @@ input[type="submit"] {
             lucide.createIcons();
         }
 
-        function setActiveCustomStage(trackerId, stage) {
-            activeCustomStages[trackerId] = stage;
+        function setActiveCustomGroupValue(trackerId, groupValue) {
+            activeCustomStages[trackerId] = groupValue;
             renderCustomTrackers();
         }
 
@@ -1928,13 +1963,6 @@ input[type="submit"] {
                 prefix = "User Stories";
                 items = userStories.filter(s => s.stage === stage);
                 activeUsStage = stage;
-            } else if (dataType === 'Custom') {
-                const tracker = customTrackers.find(t => t.id === trackerId);
-                if (tracker) {
-                    prefix = tracker.title;
-                    items = tracker.items.filter(i => i.stage === stage);
-                    activeCustomStages[trackerId] = stage;
-                }
             } else {
                 prefix = "Bugs Tracker";
                 items = stage === 'Total' ? bugs : bugs.filter(b => b.stage === stage);
@@ -1995,6 +2023,65 @@ input[type="submit"] {
             document.getElementById('modal-us-details').classList.add('open');
         }
 
+        function openDetailsModalForGroup(trackerId, groupByField, groupValue) {
+            const tracker = customTrackers.find(t => t.id === trackerId);
+            if (!tracker) return;
+
+            window.__detailsContext = { dataType: 'Custom', stage: groupValue, trackerId, groupByField, groupValue };
+
+            const items = tracker.items.filter(item => {
+                if (groupByField === 'stage') {
+                    return item.stage === groupValue;
+                }
+                const itemValue = item.custom && item.custom[groupByField] ? item.custom[groupByField] : 'Unassigned';
+                return itemValue === groupValue;
+            });
+
+            const prefix = tracker.title;
+            document.getElementById('us-modal-type-prefix').innerText = prefix;
+            document.getElementById('us-modal-stage').innerText = `${groupByField}: ${groupValue}`;
+            document.getElementById('us-modal-count').innerText = items.length;
+            
+            const thead = document.getElementById('us-details-thead');
+            const tbody = document.getElementById('us-details-tbody');
+
+            // Build Headers
+            let headers = ['ID', 'Type', 'Title', 'State'];
+            let customFields = tracker.fields || [];
+            headers.push(...customFields.map(f => f.name));
+            headers.push('Actions');
+            
+            thead.innerHTML = headers.map(h => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">${h}</th>`).join('');
+
+            if (items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${headers.length}" class="p-8 text-center text-gray-500">No items found</td></tr>`;
+            } else {
+                tbody.innerHTML = items.map(s => {
+                    const badgeClass = 'bg-blue-100 text-blue-800';
+                    
+                    let rowHtml = `<td class="px-6 py-4 font-medium">${s.id}</td>
+                            <td class="px-6 py-4"><span class="bg-gray-100 border rounded px-1">${s.type}</span></td>
+                            <td class="px-6 py-4 truncate max-w-xs" title="${s.description}">${s.description}</td>
+                            <td class="px-6 py-4"><span class="${badgeClass} px-2 py-1 rounded-full">${s.stage}</span></td>`;
+                    
+                    customFields.forEach(f => {
+                        const val = (s.custom && s.custom[f.name]) ? s.custom[f.name] : '-';
+                        rowHtml += `<td class="px-6 py-4">${val}</td>`;
+                    });
+                    
+                    rowHtml += `<td class="px-6 py-4">
+                                <div class="flex items-center gap-2">
+                                    <button class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100" onclick="openUsBugModal('Custom', '${s.id}', '${s.stage}', '${trackerId||''}')">Edit</button>
+                                    <button class="px-2 py-1 bg-red-50 text-red-700 rounded hover:bg-red-100" onclick="deleteUsBug('Custom', '${s.id}', '${trackerId||''}')">Delete</button>
+                                </div>
+                            </td>`;
+                            
+                    return `<tr class="hover:bg-gray-50 text-xs transition-colors">${rowHtml}</tr>`;
+                }).join('');
+            }
+            document.getElementById('modal-us-details').classList.add('open');
+        }
+
         
 
         // --- CRUD for User Stories & Bugs ---
@@ -2034,6 +2121,8 @@ input[type="submit"] {
                     let inputHtml = '';
                     if (f.type === 'date') {
                         inputHtml = `<input type="date" data-custom-field="${f.name}" class="w-full px-3 py-2 border rounded-lg text-sm">`;
+                    } else if (f.type === 'datetime') {
+                        inputHtml = `<input type="datetime-local" data-custom-field="${f.name}" class="w-full px-3 py-2 border rounded-lg text-sm">`;
                     } else if (f.type === 'area') {
                         inputHtml = `<textarea data-custom-field="${f.name}" class="w-full px-3 py-2 border rounded-lg text-sm" rows="3" placeholder="${f.name}"></textarea>`;
                     } else {
@@ -2059,7 +2148,11 @@ input[type="submit"] {
                 if (isCustom && item.custom) {
                     customFields.forEach(f => {
                         const inp = customContainer.querySelector(`[data-custom-field="${f.name}"]`);
-                        if (inp) inp.value = item.custom[f.name] || '';
+                        if (inp) {
+                            let v = item.custom[f.name] || '';
+                            if (f.type === 'datetime' && v.length > 16) v = v.substring(0, 16);
+                            inp.value = v;
+                        }
                     });
                 }
             } else {
@@ -2068,7 +2161,12 @@ input[type="submit"] {
                 document.getElementById('usbug-id').value = idPrefix + generateUUID().slice(0, 8);
                 document.getElementById('usbug-type').value = isUS ? 'User Story' : (isCustom ? 'Task' : 'Bug');
                 document.getElementById('usbug-desc').value = '';
-                stageSel.value = stagePref || (isCustom ? (activeCustomStages[trackerId] || stages[0]) : (isUS ? (activeUsStage || stages[0]) : (activeBugStage || stages[0])));
+                if (isCustom) {
+                    const defaultStage = (stages && stages.length > 0) ? stages[0] : 'New';
+                    stageSel.value = stagePref || defaultStage;
+                } else {
+                    stageSel.value = stagePref || (isUS ? (activeUsStage || usStages[0]) : (activeBugStage || stages[0]));
+                }
                 // Custom fields are already empty
             }
 
@@ -2663,6 +2761,7 @@ function renderBlockers() {
                 expandedDiscipline: (typeof expandedDiscipline !== 'undefined' ? expandedDiscipline : 'ALL'),
                 activeUsStage: (typeof activeUsStage !== 'undefined' ? activeUsStage : 'New'),
                 activeBugStage: (typeof activeBugStage !== 'undefined' ? activeBugStage : 'New'),
+                activeCustomGroupValues: wsSafeClone(typeof activeCustomGroupValues !== 'undefined' ? activeCustomGroupValues : {}),
                 activeCustomStages: wsSafeClone(typeof activeCustomStages !== 'undefined' ? activeCustomStages : {}),
                 bauData: wsSafeClone(typeof bauData !== 'undefined' ? bauData : { totalTickets: 0, withinSLA: 0, breachedSLA: 0, slaPercentage: 0 }),
                 showTrackerDetails: (typeof showTrackerDetails !== 'undefined' ? showTrackerDetails : false),
@@ -2706,6 +2805,7 @@ function renderBlockers() {
                 if (typeof expandedDiscipline !== 'undefined') expandedDiscipline = ex.expandedDiscipline || 'ALL';
                 if (typeof activeUsStage !== 'undefined') activeUsStage = ex.activeUsStage || 'New';
                 if (typeof activeBugStage !== 'undefined') activeBugStage = ex.activeBugStage || 'New';
+                if (typeof activeCustomGroupValues !== 'undefined') activeCustomGroupValues = wsSafeClone(ex.activeCustomGroupValues || {});
                 if (typeof activeCustomStages !== 'undefined') activeCustomStages = wsSafeClone(ex.activeCustomStages || {});
                 if (typeof bauData !== 'undefined') bauData = wsSafeClone(ex.bauData || bauData);
                 if (typeof showTrackerDetails !== 'undefined') showTrackerDetails = !!ex.showTrackerDetails;
@@ -3380,6 +3480,7 @@ function gh6BlankState(name) {
     st.executive.expandedDiscipline = 'ALL';
     st.executive.activeUsStage = 'New';
     st.executive.activeBugStage = 'New';
+    st.executive.activeCustomGroupValues = {};
     st.executive.activeCustomStages = {};
     st.executive.showTrackerDetails = false;
     st.executive.showL2Details = false;
