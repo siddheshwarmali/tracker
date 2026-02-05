@@ -2340,17 +2340,33 @@ function renderBlockers() {
                 } else if (adoSyncSource === 'discipline') {
                     pendingDisciplineData = detailsData.value;
                     renderMappingUI([...new Set(detailsData.value.map(i => i.fields['System.AssignedTo']?.displayName || 'Unassigned'))].sort());
-                } else if (adoSyncSource === 'bugs') {
-                    bugs = detailsData.value.map(item => {
-                        const f = item.fields; return { id: String(item.id), type: 'Bug', description: f['System.Title'], stage: normalizeBugStage(f['System.State']), owner: f['System.AssignedTo']?.displayName || 'Unassigned', eta: '-' };
-                    });
-                    renderBugTiles();
                 } else if (adoSyncSource === 'custom' && adoSyncTrackerId) {
                     const tracker = customTrackers.find(t => t.id === adoSyncTrackerId);
                     if (tracker) {
                         tracker.items = detailsData.value.map(item => {
                             const f = item.fields; 
-                            const obj = { id: String(item.id), type: 'Task', description: f['System.Title'], stage: (tracker.stages && tracker.stages.includes(f['System.State'])) ? f['System.State'] : (tracker.stages ? tracker.stages[0] : 'New'), owner: f['System.AssignedTo']?.displayName || 'Unassigned', eta: '-' };
+                            const adoState = f['System.State'] || '';
+                            let mappedStage = tracker.stages ? tracker.stages[0] : 'New';
+
+                            // Smart Stage Mapping
+                            if (tracker.stages && tracker.stages.length > 0) {
+                                if (tracker.stages.includes(adoState)) {
+                                    mappedStage = adoState;
+                                } else {
+                                    const lowerAdo = adoState.toLowerCase();
+                                    const match = tracker.stages.find(s => {
+                                        const lowerS = s.toLowerCase();
+                                        if (lowerS === lowerAdo) return true;
+                                        if (lowerAdo === 'new' && (lowerS.includes('todo') || lowerS.includes('new') || lowerS.includes('backlog'))) return true;
+                                        if ((lowerAdo === 'active' || lowerAdo === 'committed' || lowerAdo === 'in progress') && (lowerS.includes('progress') || lowerS.includes('active') || lowerS.includes('doing'))) return true;
+                                        if ((lowerAdo === 'resolved' || lowerAdo === 'closed' || lowerAdo === 'done') && (lowerS.includes('done') || lowerS.includes('close') || lowerS.includes('complete'))) return true;
+                                        return false;
+                                    });
+                                    if (match) mappedStage = match;
+                                }
+                            }
+
+                            const obj = { id: String(item.id), type: f['System.WorkItemType'] || 'Task', description: f['System.Title'], stage: mappedStage, owner: f['System.AssignedTo']?.displayName || 'Unassigned', eta: '-' };
                             
                             // Map custom fields based on title
                             if (tracker.fields) {
@@ -2364,6 +2380,8 @@ function renderBlockers() {
                                     else if (lower.includes('area')) val = f['System.AreaPath'];
                                     else if (lower.includes('iteration')) val = f['System.IterationPath'];
                                     else if (lower.includes('severity')) val = f['Microsoft.VSTS.Common.Severity'];
+                                    else if (lower.includes('state') || lower.includes('status')) val = f['System.State'];
+                                    else if (lower.includes('type')) val = f['System.WorkItemType'];
                                     obj.custom[name] = (val !== undefined && val !== null) ? val : '';
                                 });
                             }
@@ -2371,11 +2389,6 @@ function renderBlockers() {
                         });
                         renderCustomTrackers();
                     }
-                } else {
-                    userStories = detailsData.value.map(item => {
-                        const f = item.fields; return { id: String(item.id), type: f['System.WorkItemType'], description: f['System.Title'], stage: normalizeStage(f['System.State']), owner: f['System.AssignedTo']?.displayName || 'Unassigned', eta: '-' };
-                    });
-                    renderUserStoryTiles();
                 }
                 closeModal('modal-ado'); alert(`Synced ${detailsData.value.length} items!`);
             } catch (error) { errorEl.textContent = error.message; errorEl.classList.remove('hidden'); } finally { btn.disabled = false; btn.innerHTML = `Sync Now`; lucide.createIcons(); }
