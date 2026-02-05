@@ -818,16 +818,8 @@ input[type="submit"] {
                     <textarea id="usbug-desc" rows="3" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Short title / description"></textarea>
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Stage</label>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">State</label>
                     <select id="usbug-stage" class="w-full px-3 py-2 border rounded-lg text-sm"></select>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Owner</label>
-                    <input id="usbug-owner" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Owner" />
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">ETA</label>
-                    <input id="usbug-eta" type="date" class="w-full px-3 py-2 border rounded-lg text-sm" />
                 </div>
             </div>
 
@@ -1960,7 +1952,7 @@ input[type="submit"] {
             const tbody = document.getElementById('us-details-tbody');
 
             // Build Headers
-            let headers = ['ID', 'Type', 'Title', 'Stage'];
+            let headers = ['ID', 'Type', 'Title', 'State'];
             let customFields = [];
             
             if (dataType === 'Custom' && trackerId) {
@@ -1970,7 +1962,7 @@ input[type="submit"] {
                     headers.push(...customFields.map(f => f.name));
                 }
             }
-            headers.push('Owner', 'ETA', 'Actions');
+            headers.push('Actions');
             
             thead.innerHTML = headers.map(h => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">${h}</th>`).join('');
 
@@ -1993,9 +1985,7 @@ input[type="submit"] {
                         });
                     }
                     
-                    rowHtml += `<td class="px-6 py-4">${s.owner}</td>
-                            <td class="px-6 py-4">${s.eta}</td>
-                            <td class="px-6 py-4">
+                    rowHtml += `<td class="px-6 py-4">
                                 <div class="flex items-center gap-2">
                                     <button class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100" onclick="openUsBugModal('${dataType}', '${s.id}', '${s.stage}', '${trackerId||''}')">Edit</button>
                                     <button class="px-2 py-1 bg-red-50 text-red-700 rounded hover:bg-red-100" onclick="deleteUsBug('${dataType}', '${s.id}', '${trackerId||''}')">Delete</button>
@@ -2067,9 +2057,6 @@ input[type="submit"] {
                 document.getElementById('usbug-type').value = item.type || (isUS ? 'User Story' : (isCustom ? 'Task' : 'Bug'));
                 document.getElementById('usbug-desc').value = item.description || '';
                 stageSel.value = item.stage || stages[0];
-                document.getElementById('usbug-owner').value = item.owner || '';
-                const eta = item.eta || '';
-                document.getElementById('usbug-eta').value = (/^\d{4}-\d{2}-\d{2}$/.test(eta) ? eta : '');
                 
                 // Populate custom fields
                 if (isCustom && item.custom) {
@@ -2085,8 +2072,6 @@ input[type="submit"] {
                 document.getElementById('usbug-type').value = isUS ? 'User Story' : (isCustom ? 'Task' : 'Bug');
                 document.getElementById('usbug-desc').value = '';
                 stageSel.value = stagePref || (isCustom ? (activeCustomStages[trackerId] || stages[0]) : (isUS ? (activeUsStage || stages[0]) : (activeBugStage || stages[0])));
-                document.getElementById('usbug-owner').value = '';
-                document.getElementById('usbug-eta').value = '';
                 // Custom fields are already empty
             }
 
@@ -2112,14 +2097,12 @@ input[type="submit"] {
             const type = document.getElementById('usbug-type').value.trim() || (isUS ? 'User Story' : (isCustom ? 'Task' : 'Bug'));
             const description = document.getElementById('usbug-desc').value.trim();
             const stage = document.getElementById('usbug-stage').value;
-            const owner = document.getElementById('usbug-owner').value.trim();
-            const eta = document.getElementById('usbug-eta').value || '';
 
             if (!id || id.length < 2) return showAlert('ID is required', 'error');
             if (!description) return showAlert('Title is required', 'error');
 
             const existingIdx = list.findIndex(x => String(x.id) === String(id));
-            const obj = { id, type, description, stage, owner, eta };
+            const obj = { id, type, description, stage };
             
             if (isCustom) {
                 obj.custom = {};
