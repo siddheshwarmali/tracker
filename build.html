@@ -1796,7 +1796,7 @@ input[type="submit"] {
             
             const container = document.getElementById('cfg-fields-container');
             container.innerHTML = '';
-            (t.fields || []).forEach(f => addConfigField(f.name));
+            (t.fields || []).forEach(f => addConfigField(f.name, f.type));
             
             document.getElementById('modal-tracker-config').classList.add('open');
         }
@@ -1820,11 +1820,16 @@ input[type="submit"] {
             }).join('');
         }
 
-        function addConfigField(val = '') {
+        function addConfigField(val = '', type = 'text') {
             const div = document.createElement('div');
-            div.className = 'flex gap-2 items-center';
+            div.className = 'flex gap-2 items-center mb-2 field-config-row';
             div.innerHTML = `
                 <input type="text" class="cfg-field-name flex-1 border border-gray-300 rounded p-2 text-sm" placeholder="Field Name (e.g. Cost)" value="${val}">
+                <select class="cfg-field-type border border-gray-300 rounded p-2 text-sm w-28 bg-white">
+                    <option value="text" ${type==='text'?'selected':''}>Text</option>
+                    <option value="date" ${type==='date'?'selected':''}>Date</option>
+                    <option value="area" ${type==='area'?'selected':''}>Text Area</option>
+                </select>
                 <button onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
             `;
             document.getElementById('cfg-fields-container').appendChild(div);
@@ -1844,8 +1849,10 @@ input[type="submit"] {
             if (stages.length === 0) return alert("At least one stage required");
 
             const fields = [];
-            document.querySelectorAll('.cfg-field-name').forEach(inp => {
-                if (inp.value.trim()) fields.push({ name: inp.value.trim(), type: 'text' });
+            document.querySelectorAll('.field-config-row').forEach(row => {
+                const name = row.querySelector('.cfg-field-name').value.trim();
+                const type = row.querySelector('.cfg-field-type').value;
+                if (name) fields.push({ name, type });
             });
 
             // Capture final colors
@@ -2037,8 +2044,15 @@ input[type="submit"] {
                 customContainer.classList.remove('hidden');
                 customFields.forEach(f => {
                     const div = document.createElement('div');
-                    div.innerHTML = `<label class="block text-xs font-medium text-gray-600 mb-1">${f.name}</label>
-                                     <input type="text" data-custom-field="${f.name}" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="${f.name}">`;
+                    let inputHtml = '';
+                    if (f.type === 'date') {
+                        inputHtml = `<input type="date" data-custom-field="${f.name}" class="w-full px-3 py-2 border rounded-lg text-sm">`;
+                    } else if (f.type === 'area') {
+                        inputHtml = `<textarea data-custom-field="${f.name}" class="w-full px-3 py-2 border rounded-lg text-sm" rows="3" placeholder="${f.name}"></textarea>`;
+                    } else {
+                        inputHtml = `<input type="text" data-custom-field="${f.name}" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="${f.name}">`;
+                    }
+                    div.innerHTML = `<label class="block text-xs font-medium text-gray-600 mb-1">${f.name}</label>${inputHtml}`;
                     customContainer.appendChild(div);
                 });
             } else {
@@ -2350,20 +2364,9 @@ function renderBlockers() {
 
                             // Smart Stage Mapping
                             if (tracker.stages && tracker.stages.length > 0) {
-                                if (tracker.stages.includes(adoState)) {
-                                    mappedStage = adoState;
-                                } else {
-                                    const lowerAdo = adoState.toLowerCase();
-                                    const match = tracker.stages.find(s => {
-                                        const lowerS = s.toLowerCase();
-                                        if (lowerS === lowerAdo) return true;
-                                        if (lowerAdo === 'new' && (lowerS.includes('todo') || lowerS.includes('new') || lowerS.includes('backlog'))) return true;
-                                        if ((lowerAdo === 'active' || lowerAdo === 'committed' || lowerAdo === 'in progress') && (lowerS.includes('progress') || lowerS.includes('active') || lowerS.includes('doing'))) return true;
-                                        if ((lowerAdo === 'resolved' || lowerAdo === 'closed' || lowerAdo === 'done') && (lowerS.includes('done') || lowerS.includes('close') || lowerS.includes('complete'))) return true;
-                                        return false;
-                                    });
-                                    if (match) mappedStage = match;
-                                }
+                                // Exact match or Case-insensitive match only. No hardcoded assumptions.
+                                const match = tracker.stages.find(s => s === adoState || s.toLowerCase() === adoState.toLowerCase());
+                                if (match) mappedStage = match;
                             }
 
                             const obj = { id: String(item.id), type: f['System.WorkItemType'] || 'Task', description: f['System.Title'], stage: mappedStage, owner: f['System.AssignedTo']?.displayName || 'Unassigned', eta: '-' };
@@ -2378,12 +2381,18 @@ function renderBlockers() {
                                     // Dynamic Mapping: Check exact match or suffix match (e.g. "Priority" matches "Microsoft.VSTS.Common.Priority")
                                     if (val === undefined) {
                                         const lowerName = name.toLowerCase();
-                                        // Special alias: Owner -> AssignedTo
-                                        if (lowerName === 'owner') {
-                                            val = f['System.AssignedTo'];
-                                        } else if (lowerName === 'id') {
+                                        
+                                        // 1. Smart Aliases for common fields
+                                        if (lowerName === 'id') {
                                             val = item.id;
+                                        } else if (['owner', 'assigned', 'assigned to', 'assignee'].includes(lowerName)) {
+                                            val = f['System.AssignedTo'];
+                                        } else if (['state', 'status'].includes(lowerName)) {
+                                            val = f['System.State'];
+                                        } else if (['title', 'summary'].includes(lowerName)) {
+                                            val = f['System.Title'];
                                         } else {
+                                            // 2. Suffix / Fuzzy Match (e.g. "Points" -> "...StoryPoints")
                                             const cleanName = lowerName.replace(/\s+/g, '');
                                             const key = Object.keys(f).find(k => {
                                                 const kLow = k.toLowerCase();
