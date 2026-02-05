@@ -2373,15 +2373,31 @@ function renderBlockers() {
                                 obj.custom = {};
                                 tracker.fields.forEach(cf => {
                                     const name = cf.name;
-                                    const lower = name.toLowerCase();
-                                    let val = '';
-                                    if (lower.includes('priority')) val = f['Microsoft.VSTS.Common.Priority'];
-                                    else if (lower.includes('tag')) val = f['System.Tags'];
-                                    else if (lower.includes('area')) val = f['System.AreaPath'];
-                                    else if (lower.includes('iteration')) val = f['System.IterationPath'];
-                                    else if (lower.includes('severity')) val = f['Microsoft.VSTS.Common.Severity'];
-                                    else if (lower.includes('state') || lower.includes('status')) val = f['System.State'];
-                                    else if (lower.includes('type')) val = f['System.WorkItemType'];
+                                    let val = f[name];
+
+                                    // Dynamic Mapping: Check exact match or suffix match (e.g. "Priority" matches "Microsoft.VSTS.Common.Priority")
+                                    if (val === undefined) {
+                                        const lowerName = name.toLowerCase();
+                                        // Special alias: Owner -> AssignedTo
+                                        if (lowerName === 'owner') {
+                                            val = f['System.AssignedTo'];
+                                        } else if (lowerName === 'id') {
+                                            val = item.id;
+                                        } else {
+                                            const cleanName = lowerName.replace(/\s+/g, '');
+                                            const key = Object.keys(f).find(k => {
+                                                const kLow = k.toLowerCase();
+                                                return kLow === lowerName || kLow.endsWith('.' + lowerName) || kLow.endsWith('.' + cleanName);
+                                            });
+                                            if (key) val = f[key];
+                                        }
+                                    }
+
+                                    // Handle IdentityRef objects (like AssignedTo)
+                                    if (val && typeof val === 'object' && val.displayName) {
+                                        val = val.displayName;
+                                    }
+
                                     obj.custom[name] = (val !== undefined && val !== null) ? val : '';
                                 });
                             }
