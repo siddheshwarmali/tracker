@@ -1056,8 +1056,6 @@ input[type="submit"] {
 
         // --- GLOBAL VARIABLES (Dashboard) ---
         let milestones = [];
-        let userStories = [];
-        let bugs = []; // Added for Bugs Tracker
         let customTrackers = []; // [{ id, title, items: [] }]
         let blockers = [];
         let kpiData = [];
@@ -1087,8 +1085,6 @@ input[type="submit"] {
         let currentStageColors = {}; // Temp storage for config modal
         let showL2Details = false;
         let discModalTab = 'L1';
-        const usStages = ['New', 'Development', 'Authoring', 'IT UAT', 'Business UAT', 'Closed'];
-        const bugStages = ['New', 'Active', 'Resolved', 'Hold', 'Closed']; // Added for Bugs Tracker
         let savedSummaryText = null;
         let adoSyncSource = null;
         let adoSyncTrackerId = null;
@@ -1277,7 +1273,6 @@ input[type="submit"] {
                 try {
                     const w = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
                     let sheetName = w.SheetNames[0];
-                    if ((type === 'stories' || type === 'bugs') && w.SheetNames.length > 1) sheetName = w.SheetNames[1];
                     const j = XLSX.utils.sheet_to_json(w.Sheets[sheetName]);
                     if(type === 'milestones') {
                         milestones = j.map((r,i) => ({
@@ -1290,9 +1285,7 @@ input[type="submit"] {
                             remark: r.Remark||r.remark||''
                         }));
                         renderMilestones();
-                    } else if(type === 'stories') { mapStories(j); }
-                    else if(type === 'bugs') { mapBugs(j); }
-                    else if(type === 'kpi') {
+            } else if(type === 'kpi') {
                         let lastCategory = 'General';
                         kpiData = j.map(r => {
                             const keys = Object.keys(r);
@@ -1409,30 +1402,6 @@ input[type="submit"] {
                     }
                 }
             }
-        }
-
-        function mapStories(json) {
-            userStories = json.map(r => ({
-                id: r['US ID'] || r['ID'] || r['id'] || '?', 
-                type: r['Work Item Type'] || r['Type'] || r['type'] || 'User Story', 
-                description: r['Description'] || r['Title'] || r['description'] || r['title'] || '', 
-                stage: normalizeStage(r['State'] || r['Status'] || r['Stage'] || r['state'] || r['status'] || 'New'), 
-                owner: r['Owner'] || r['owner'] || '', 
-                eta: r['ETA'] || r['eta'] || '-'
-            }));
-            renderUserStoryTiles();
-        }
-
-        function mapBugs(json) {
-            bugs = json.map(r => ({
-                id: r['Bug ID'] || r['ID'] || r['id'] || '?', 
-                type: 'Bug', 
-                description: r['Description'] || r['Title'] || r['description'] || r['title'] || '', 
-                stage: normalizeBugStage(r['State'] || r['Status'] || r['Stage'] || r['state'] || r['status'] || 'New'), 
-                owner: r['Owner'] || r['owner'] || '', 
-                eta: r['ETA'] || r['eta'] || '-'
-            }));
-            renderBugTiles();
         }
 
         function parseXlsDate(d) {
@@ -1735,48 +1704,6 @@ input[type="submit"] {
             disc.grandTotal = disc.openTasks + disc.closedTasks + disc.holdTasks;
         }
 
-        // --- USER STORY TRACKER ---
-        function renderUserStoryTiles() {
-            const container = document.getElementById('us-tiles');
-            if (!container) return;
-            const counts = {}; usStages.forEach(s=>counts[s]=0);
-            userStories.forEach(s=>counts[s.stage] = (counts[s.stage]||0)+1);
-            container.innerHTML = usStages.map(s => {
-                const act = activeUsStage === s;
-                return `<div onclick="setActiveUsStage('${s}')" ondblclick="openDetailsModal('US', '${s}')" class="cursor-pointer rounded-lg p-4 border-2 transition-all ${act?'border-indigo-500 bg-indigo-50 shadow-sm':'border-gray-200 bg-white hover:border-indigo-300'}"><div class="flex justify-between mb-2"><span class="text-sm font-bold ${act?'text-indigo-700':'text-gray-600'}">${s}</span></div><div class="text-3xl font-extrabold text-gray-800">${counts[s]}</div><div class="text-xs text-gray-500 mt-1">Stories</div></div>`;
-            }).join('');
-            lucide.createIcons();
-            renderSummary();
-        }
-
-        function setActiveUsStage(s) {
-            activeUsStage = s;
-            renderUserStoryTiles();
-        }
-
-        // --- BUGS TRACKER (NEW) ---
-        function renderBugTiles() {
-            const container = document.getElementById('bug-tiles');
-            if (!container) return;
-            const counts = {}; bugStages.forEach(s=>counts[s]=0);
-            bugs.forEach(b=>counts[b.stage] = (counts[b.stage]||0)+1);
-            
-            // Insert Total Bugs at start
-            let totalHtml = `<div ondblclick="openDetailsModal('Bug', 'Total')" class="cursor-pointer rounded-lg p-4 border-2 transition-all border-gray-200 bg-white hover:border-red-300"><div class="flex justify-between mb-2"><span class="text-sm font-bold text-gray-600">Total Bugs</span></div><div class="text-3xl font-extrabold text-gray-800">${bugs.length}</div><div class="text-xs text-gray-500 mt-1">Items</div></div>`;
-
-            container.innerHTML = totalHtml + bugStages.map(s => {
-                const act = activeBugStage === s;
-                return `<div onclick="setActiveBugStage('${s}')" ondblclick="openDetailsModal('Bug', '${s}')" class="cursor-pointer rounded-lg p-4 border-2 transition-all ${act?'border-red-500 bg-red-50 shadow-sm':'border-gray-200 bg-white hover:border-red-300'}"><div class="flex justify-between mb-2"><span class="text-sm font-bold ${act?'text-red-700':'text-gray-600'}">${s}</span></div><div class="text-3xl font-extrabold text-gray-800">${counts[s]}</div><div class="text-xs text-gray-500 mt-1">Bugs</div></div>`;
-            }).join('');
-            lucide.createIcons();
-            renderSummary();
-        }
-
-        function setActiveBugStage(s) {
-            activeBugStage = s;
-            renderBugTiles();
-        }
-
         // --- CUSTOM TRACKERS (DYNAMIC) ---
         function promptAddCustomTracker() {
             document.getElementById('new-tracker-title').value = '';
@@ -2034,76 +1961,6 @@ input[type="submit"] {
             renderCustomTrackers();
         }
 
-        // --- GENERIC DETAILS MODAL ---
-        function openDetailsModal(dataType, stage, trackerId = null) {
-            window.__detailsContext = { dataType, stage, trackerId };
-
-            let items = [];
-            let prefix = "";
-            if (dataType === 'US') {
-                prefix = "User Stories";
-                items = userStories.filter(s => s.stage === stage);
-                activeUsStage = stage;
-            } else {
-                prefix = "Bugs Tracker";
-                items = stage === 'Total' ? bugs : bugs.filter(b => b.stage === stage);
-                activeBugStage = stage;
-            }
-
-            document.getElementById('us-modal-type-prefix').innerText = prefix;
-            document.getElementById('us-modal-stage').innerText = stage;
-            document.getElementById('us-modal-count').innerText = items.length;
-            
-            const thead = document.getElementById('us-details-thead');
-            const tbody = document.getElementById('us-details-tbody');
-
-            // Build Headers
-            let headers = ['ID', 'Type', 'Title', 'State'];
-            let customFields = [];
-            
-            if (dataType === 'Custom' && trackerId) {
-                const tracker = customTrackers.find(t => t.id === trackerId);
-                if (tracker && tracker.fields) {
-                    customFields = tracker.fields;
-                    headers.push(...customFields.map(f => f.name));
-                }
-            }
-            headers.push('Actions');
-            
-            thead.innerHTML = headers.map(h => `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">${h}</th>`).join('');
-
-            if (items.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="${headers.length}" class="p-8 text-center text-gray-500">No items found</td></tr>`;
-            } else {
-                tbody.innerHTML = items.map(s => {
-                    const dt = (dataType === 'US') ? 'US' : 'Bug';
-                    const badgeClass = (dt === 'US') ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800';
-                    
-                    let rowHtml = `<td class="px-6 py-4 font-medium">${s.id}</td>
-                            <td class="px-6 py-4"><span class="bg-gray-100 border rounded px-1">${s.type}</span></td>
-                            <td class="px-6 py-4 truncate max-w-xs" title="${s.description}">${s.description}</td>
-                            <td class="px-6 py-4"><span class="${badgeClass} px-2 py-1 rounded-full">${s.stage}</span></td>`;
-                    
-                    if (dataType === 'Custom') {
-                        customFields.forEach(f => {
-                            const val = (s.custom && s.custom[f.name]) ? s.custom[f.name] : '-';
-                            rowHtml += `<td class="px-6 py-4">${val}</td>`;
-                        });
-                    }
-                    
-                    rowHtml += `<td class="px-6 py-4">
-                                <div class="flex items-center gap-2">
-                                    <button class="px-2 py-1 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100" onclick="openUsBugModal('${dataType}', '${s.id}', '${s.stage}', '${trackerId||''}')">Edit</button>
-                                    <button class="px-2 py-1 bg-red-50 text-red-700 rounded hover:bg-red-100" onclick="deleteUsBug('${dataType}', '${s.id}', '${trackerId||''}')">Delete</button>
-                                </div>
-                            </td>`;
-                            
-                    return `<tr class="hover:bg-gray-50 text-xs transition-colors">${rowHtml}</tr>`;
-                }).join('');
-            }
-            document.getElementById('modal-us-details').classList.add('open');
-        }
-
         function openDetailsModalForGroup(trackerId, groupByField, groupValue) {
             const tracker = customTrackers.find(t => t.id === trackerId);
             if (!tracker) return;
@@ -2167,9 +2024,8 @@ input[type="submit"] {
 
         // --- CRUD for User Stories & Bugs ---
         function openUsBugModal(dataType, id = null, stagePref = null, trackerId = null) {
-            const isUS = (dataType === 'US');
             const isCustom = (dataType === 'Custom');
-            let list = isUS ? userStories : bugs;
+            let list = [];
             let customStages = null;
             let customFields = [];
 
@@ -2180,7 +2036,7 @@ input[type="submit"] {
                 customFields = t ? t.fields || [] : [];
             }
 
-            const stages = isCustom ? customStages : (isUS ? usStages : bugStages);
+            const stages = customStages || ["New", "Done"];
 
             const mode = id ? 'edit' : 'new';
             document.getElementById('usbug-datatype').value = dataType;
@@ -2219,9 +2075,9 @@ input[type="submit"] {
             if (mode === 'edit') {
                 const item = list.find(x => String(x.id) === String(id));
                 if (!item) { showAlert('Item not found', 'error'); return; }
-                document.getElementById('usbug-modal-title').innerText = isCustom ? 'Edit Item' : (isUS ? 'Edit User Story' : 'Edit Bug');
+                document.getElementById('usbug-modal-title').innerText = 'Edit Item';
                 document.getElementById('usbug-id').value = item.id || '';
-                document.getElementById('usbug-type').value = item.type || (isUS ? 'User Story' : (isCustom ? 'Task' : 'Bug'));
+                document.getElementById('usbug-type').value = item.type || 'Task';
                 document.getElementById('usbug-desc').value = item.description || '';
                 stageSel.value = item.stage || stages[0];
                 
@@ -2237,17 +2093,13 @@ input[type="submit"] {
                     });
                 }
             } else {
-                document.getElementById('usbug-modal-title').innerText = isCustom ? 'Add Item' : (isUS ? 'Add User Story' : 'Add Bug');
-                const idPrefix = isUS ? 'US-' : (isCustom ? 'TASK-' : 'BUG-');
+                document.getElementById('usbug-modal-title').innerText = 'Add Item';
+                const idPrefix = 'TASK-';
                 document.getElementById('usbug-id').value = idPrefix + generateUUID().slice(0, 8);
-                document.getElementById('usbug-type').value = isUS ? 'User Story' : (isCustom ? 'Task' : 'Bug');
+                document.getElementById('usbug-type').value = 'Task';
                 document.getElementById('usbug-desc').value = '';
-                if (isCustom) {
-                    const defaultStage = (stages && stages.length > 0) ? stages[0] : 'New';
-                    stageSel.value = stagePref || defaultStage;
-                } else {
-                    stageSel.value = stagePref || (isUS ? (activeUsStage || usStages[0]) : (activeBugStage || stages[0]));
-                }
+                const defaultStage = (stages && stages.length > 0) ? stages[0] : 'New';
+                stageSel.value = stagePref || defaultStage;
                 // Custom fields are already empty
             }
 
@@ -2258,10 +2110,9 @@ input[type="submit"] {
         function saveUsBugFromModal() {
             const dataType = document.getElementById('usbug-datatype').value;
             const trackerId = document.getElementById('usbug-tracker-id').value;
-            const isUS = (dataType === 'US');
             const isCustom = (dataType === 'Custom');
             let customFields = [];
-            let list = isUS ? userStories : bugs;
+            let list = [];
             if (isCustom) {
                 const t = customTrackers.find(ct => ct.id === trackerId);
                 if (!t) return showAlert('Tracker not found', 'error');
@@ -2270,7 +2121,7 @@ input[type="submit"] {
             }
 
             const id = document.getElementById('usbug-id').value.trim();
-            const type = document.getElementById('usbug-type').value.trim() || (isUS ? 'User Story' : (isCustom ? 'Task' : 'Bug'));
+            const type = document.getElementById('usbug-type').value.trim() || 'Task';
             const description = document.getElementById('usbug-desc').value.trim();
             const stage = document.getElementById('usbug-stage').value;
 
@@ -2296,14 +2147,15 @@ input[type="submit"] {
             if (typeof renderAll === 'function') renderAll();
 
             if (window.__detailsContext && document.getElementById('modal-us-details').classList.contains('open')) {
-                openDetailsModal(window.__detailsContext.dataType, window.__detailsContext.stage, window.__detailsContext.trackerId);
+                if (window.__detailsContext.trackerId && window.__detailsContext.groupByField) {
+                    openDetailsModalForGroup(window.__detailsContext.trackerId, window.__detailsContext.groupByField, window.__detailsContext.groupValue);
+                }
             }
         }
 
         function deleteUsBug(dataType, id, trackerId = null) {
-            const isUS = (dataType === 'US');
             const isCustom = (dataType === 'Custom');
-            let list = isUS ? userStories : bugs;
+            let list = [];
             if (isCustom) {
                 const t = customTrackers.find(ct => ct.id === trackerId);
                 if (!t) return;
@@ -2319,7 +2171,9 @@ input[type="submit"] {
 
             if (typeof renderAll === 'function') renderAll();
             if (window.__detailsContext && document.getElementById('modal-us-details').classList.contains('open')) {
-                openDetailsModal(window.__detailsContext.dataType, window.__detailsContext.stage, window.__detailsContext.trackerId);
+                if (window.__detailsContext.trackerId && window.__detailsContext.groupByField) {
+                    openDetailsModalForGroup(window.__detailsContext.trackerId, window.__detailsContext.groupByField, window.__detailsContext.groupValue);
+                }
             }
         }
 
@@ -2579,10 +2433,7 @@ function renderBlockers() {
         }
 
         function loadMockAdoData() {
-            const mockStories = [ { id: '101', type: 'User Story', description: 'Implement Login Page', stage: 'Development', owner: 'Jane Doe', eta: '2023-11-15' }, { id: '102', type: 'Bug', description: 'Fix CSS Grid Issue', stage: 'New', owner: 'John Smith', eta: '2023-11-20' } ];
-            const mockBugs = [ { id: 'B01', type: 'Bug', description: 'API Timeout', stage: 'New', owner: 'Alice', eta: '-' }, { id: 'B02', type: 'Bug', description: 'Button misalignment', stage: 'Active', owner: 'Bob', eta: '-' } ];
-            if (adoSyncSource === 'bugs') { bugs = mockBugs; renderBugTiles(); } 
-            else if (adoSyncSource === 'run') { document.getElementById('run-iframe').contentWindow.postMessage({ type: 'ADO_DATA_FOR_RUN', payload: [ { id: '201', title: 'Update Links', type: 'Small', actualTime: 2.5, threshold: 4 } ] }, '*'); } 
+            if (adoSyncSource === 'run') { document.getElementById('run-iframe').contentWindow.postMessage({ type: 'ADO_DATA_FOR_RUN', payload: [ { id: '201', title: 'Update Links', type: 'Small', actualTime: 2.5, threshold: 4 } ] }, '*'); } 
             else if (adoSyncSource === 'custom' && adoSyncTrackerId) {
                 const tracker = customTrackers.find(t => t.id === adoSyncTrackerId);
                 if (tracker) {
@@ -2597,7 +2448,6 @@ function renderBlockers() {
                     renderCustomTrackers();
                 }
             }
-            else { userStories = mockStories; renderUserStoryTiles(); }
             closeModal('modal-ado');
         }
 
@@ -2673,12 +2523,6 @@ function renderBlockers() {
                 let msg = `TASK EXECUTION: ${openTasks} Open Tasks`;
                 if (bottleneck.count > 0) msg += `\n📉 Bottleneck detected in ${bottleneck.name} with ${bottleneck.count} open items.`;
                 sections.push(msg);
-            }
-
-            // 4. Quality (Bugs)
-            if (bugs.length > 0) {
-                const active = bugs.filter(b => ['New', 'Active'].includes(b.stage)).length;
-                if (active > 0) sections.push(`QUALITY ASSURANCE:\n🐛 ${active} active defects being tracked.`);
             }
 
             // 5. Custom Workstreams
@@ -2827,8 +2671,6 @@ function renderBlockers() {
             // Executive dashboard state
             const executive = {
                 milestones: wsSafeClone(typeof milestones !== 'undefined' ? milestones : []),
-                userStories: wsSafeClone(typeof userStories !== 'undefined' ? userStories : []),
-                bugs: wsSafeClone(typeof bugs !== 'undefined' ? bugs : []),
                 customTrackers: wsSafeClone(typeof customTrackers !== 'undefined' ? customTrackers : []),
                 blockers: wsSafeClone(typeof blockers !== 'undefined' ? blockers : []),
                 kpiData: wsSafeClone(typeof kpiData !== 'undefined' ? kpiData : []),
@@ -2840,8 +2682,6 @@ function renderBlockers() {
                 tempAdoTasks: wsSafeClone(typeof tempAdoTasks !== 'undefined' ? tempAdoTasks : []),
                 l3Data: wsSafeClone(typeof l3Data !== 'undefined' ? l3Data : []),
                 expandedDiscipline: (typeof expandedDiscipline !== 'undefined' ? expandedDiscipline : 'ALL'),
-                activeUsStage: (typeof activeUsStage !== 'undefined' ? activeUsStage : 'New'),
-                activeBugStage: (typeof activeBugStage !== 'undefined' ? activeBugStage : 'New'),
                 activeCustomGroupValues: wsSafeClone(typeof activeCustomGroupValues !== 'undefined' ? activeCustomGroupValues : {}),
                 sectionOrder: wsSafeClone(typeof sectionOrder !== 'undefined' ? sectionOrder : []),
                 activeCustomStages: wsSafeClone(typeof activeCustomStages !== 'undefined' ? activeCustomStages : {}),
@@ -2873,8 +2713,6 @@ function renderBlockers() {
                 const hl = state.headless || {};
 
                 if (typeof milestones !== 'undefined') milestones = wsSafeClone(ex.milestones || []);
-                if (typeof userStories !== 'undefined') userStories = wsSafeClone(ex.userStories || []);
-                if (typeof bugs !== 'undefined') bugs = wsSafeClone(ex.bugs || []);
                 if (typeof customTrackers !== 'undefined') customTrackers = wsSafeClone(ex.customTrackers || []);
                 if (typeof blockers !== 'undefined') blockers = wsSafeClone(ex.blockers || []);
                 if (typeof kpiData !== 'undefined') kpiData = wsSafeClone(ex.kpiData || []);
@@ -2885,8 +2723,6 @@ function renderBlockers() {
                 if (typeof l2Data !== 'undefined') l2Data = wsSafeClone(ex.l2Data || l2Data);
                 if (typeof tempAdoTasks !== 'undefined') tempAdoTasks = wsSafeClone(ex.tempAdoTasks || []);
                 if (typeof expandedDiscipline !== 'undefined') expandedDiscipline = ex.expandedDiscipline || 'ALL';
-                if (typeof activeUsStage !== 'undefined') activeUsStage = ex.activeUsStage || 'New';
-                if (typeof activeBugStage !== 'undefined') activeBugStage = ex.activeBugStage || 'New';
                 if (typeof activeCustomGroupValues !== 'undefined') activeCustomGroupValues = wsSafeClone(ex.activeCustomGroupValues || {});
                 if (typeof sectionOrder !== 'undefined') sectionOrder = wsSafeClone(ex.sectionOrder || []);
                 if (typeof activeCustomStages !== 'undefined') activeCustomStages = wsSafeClone(ex.activeCustomStages || {});
@@ -3181,8 +3017,6 @@ function renderBlockers() {
 
             // Executive sheets
             addJsonSheet('Milestones', exec.milestones);
-            addJsonSheet('UserStories', exec.userStories);
-            addJsonSheet('Bugs', exec.bugs);
             if(exec.customTrackers) exec.customTrackers.forEach(ct => addJsonSheet('Tracker_'+ct.title, ct.items));
             addJsonSheet('Blockers', exec.blockers);
             addJsonSheet('KPIs', exec.kpiData);
@@ -3252,17 +3086,6 @@ function renderBlockers() {
                 }
             };
             reader.readAsText(file);
-        }
-
-        function wsClearLocalStorage() {
-            if (!confirm('Clear all saved workspaces from this browser? (Your dashboard UI will remain. You can re-import exports later.)')) return;
-            localStorage.removeItem(WS_STORAGE_KEY);
-            localStorage.removeItem(WS_LAST_KEY);
-            wsCurrentId = null;
-            wsLastSerialized = null;
-            wsEnsureDefault();
-            wsRefreshSelect();
-            wsSetIndicator('Storage cleared ✓', true);
         }
 
 window.onload = function() {
@@ -3478,8 +3301,6 @@ function wsOpenSaveConfirmModal(opts = {}) {
                 <div class="bg-gray-50 rounded p-2 border">L1 Disciplines: <b>${counts.disciplines}</b></div>
                 <div class="bg-gray-50 rounded p-2 border">L2 Detailed Rows: <b>${counts.l2rows}</b></div>
                 <div class="bg-gray-50 rounded p-2 border">L3 Tasks: <b>${counts.l3}</b></div>
-                <div class="bg-gray-50 rounded p-2 border">User Stories: <b>${counts.stories}</b></div>
-                <div class="bg-gray-50 rounded p-2 border">Bugs: <b>${counts.bugs}</b></div>
                 <div class="bg-gray-50 rounded p-2 border">Blockers: <b>${counts.blockers}</b></div>
                 <div class="bg-gray-50 rounded p-2 border">KPIs: <b>${counts.kpis}</b></div>
             </div>
@@ -3529,8 +3350,6 @@ function gh6BlankState(name) {
 
     // Reset major collections
     st.executive.milestones = [];
-    st.executive.userStories = [];
-    st.executive.bugs = [];
     st.executive.customTrackers = [];
     st.executive.blockers = [];
     st.executive.kpiData = [];
@@ -3561,8 +3380,6 @@ function gh6BlankState(name) {
 
     st.executive.bauData = { totalTickets:0, withinSLA:0, breachedSLA:0, slaPercentage:0 };
     st.executive.expandedDiscipline = 'ALL';
-    st.executive.activeUsStage = 'New';
-    st.executive.activeBugStage = 'New';
     st.executive.activeCustomGroupValues = {};
     st.executive.sectionOrder = [];
     st.executive.activeCustomStages = {};
@@ -3581,9 +3398,6 @@ function gh6BlankState(name) {
     st.__meta.createdFrom = 'blank';
     return st;
 }
-
-// Remove clear storage
-function wsClearLocalStorage() { alert('Clear Storage is removed.'); }
 
 // Load list from GitHub and fill workspace store (keeps existing UI)
 async function gh6SyncListIntoStore() {
@@ -4408,56 +4222,6 @@ async function wsModalPrimary() {
   document.addEventListener('DOMContentLoaded', () => {
     try { window.wsUpdatePublishUI(window.wsCurrentMeta); } catch(e) {}
   });
-</script>
-
-
-<script>
-/* === PUBLISH / PRIVATE STATE FIX === */
-(function () {
-  function setPublishIndicator(isPublic) {
-    const pill = document.getElementById('ws-indicator');
-    if (!pill) return;
-    if (isPublic) {
-      pill.textContent = 'Published';
-      pill.className = 'text-xs px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 ml-2';
-    } else {
-      pill.textContent = 'Private';
-      pill.className = 'text-xs px-2 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200 ml-2';
-    }
-  }
-
-  // Intercept workspace actions
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-ws-action]');
-    if (!btn) return;
-
-    const action = btn.getAttribute('data-ws-action');
-
-    if (action === 'publish') {
-      // force public=true
-      try {
-        await window.wsSetPublished?.(true);
-      } catch (e) {}
-      setPublishIndicator(true);
-    }
-
-    if (action === 'unpublish') {
-      // force public=false
-      try {
-        await window.wsSetPublished?.(false);
-      } catch (e) {}
-      setPublishIndicator(false);
-    }
-  });
-
-  // On load, normalize indicator from state if available
-  window.addEventListener('DOMContentLoaded', () => {
-    try {
-      const isPublic = window.wsState?.published === true;
-      setPublishIndicator(isPublic);
-    } catch (e) {}
-  });
-})();
 </script>
 
 
