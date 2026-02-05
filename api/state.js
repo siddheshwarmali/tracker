@@ -88,7 +88,10 @@ module.exports = async (req, res) => {
     const me = users[s.userId] || { role: 'viewer' };
     const isAdmin = me.role === 'admin';
 
-    const dash = req.query.dash ? String(req.query.dash) : null;
+    // SECURITY FIX: Validate dashboard ID format (alphanumeric, dashes, underscores only)
+    let dash = req.query.dash ? String(req.query.dash) : null;
+    if (dash && !/^[a-zA-Z0-9\-_]+$/.test(dash)) return json(res, 400, { error: 'Invalid dashboard ID format' });
+
     const list = req.query.list !== undefined;
     const publish = req.query.publish !== undefined;
     const unpublish = req.query.unpublish !== undefined;
@@ -128,6 +131,10 @@ module.exports = async (req, res) => {
 
     // 3. SAVE (Build or Run)
     if (req.method === 'POST' && dash && !publish && !unpublish) {
+      if (me.role === 'viewer') {
+        return json(res, 403, { error: 'Forbidden: Viewers cannot create or edit dashboards' });
+      }
+
       const body = await readBody(req);
       const idx = await loadIndex();
       const dashboards = idx.dashboards;
@@ -194,7 +201,16 @@ module.exports = async (req, res) => {
 
     // 5. DELETE
     if (req.method === 'DELETE' && dash) {
-       // ... existing delete logic ...
+      const idx = await loadIndex();
+      const rec = idx.dashboards[dash];
+      if (!rec) return json(res, 404, { error: 'Not found' });
+      if (rec.ownerId !== s.userId && !isAdmin) return json(res, 403, { error: 'Forbidden' });
+
+      const d = await loadDash(dash);
+      if (d.exists) await ghDeleteFile(d.path, `delete ${dash}`, d.sha);
+      delete idx.dashboards[dash];
+      await saveIndex(idx.dashboards);
+      return json(res, 200, { ok: true });
     }
 
     return json(res, 400, { error: 'Method not supported' });
