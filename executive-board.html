@@ -210,7 +210,7 @@ function card(d){
             <span class='px-2 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600'>Owner: ${owner}</span>
           </div>
           <!-- Only Overall Summary visible on the card -->
-          <div class='mt-3 text-sm text-slate-600 leading-relaxed line-clamp-4 whitespace-pre-wrap' data-card-summary='${encodeURIComponent(dashId)}'>${summary || '—'}</div>
+          <div class='mt-3 text-sm text-slate-600 leading-relaxed whitespace-pre-wrap' data-card-summary='${encodeURIComponent(dashId)}'>${summary || '—'}</div>
         </div>
         <div class='flex flex-wrap gap-2 justify-end shrink-0'>
           <a href='/build.html?dash=${encodeURIComponent(dashId)}' class='inline-flex px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium'>Open</a>
