@@ -140,16 +140,16 @@ function computeAutoSummary(state) {
   if (trackers.length > 0) {
     const updates = trackers.map(ct => {
         const active = (ct.items||[]).filter(i => !['Done','Closed','Resolved'].includes(i.stage)).length;
-        return `${ct.title}: ${active} active`;
+        return `• ${ct.title}: ${active} active`;
     });
-    parts.push(updates.join(', ') + '.');
+    parts.push(`WORKSTREAMS:\n${updates.join('\n')}`);
   }
 
   if (bau && bau.totalTickets > 0) {
     parts.push(`BAU: ${bau.slaPercentage}% SLA (${bau.breachedSLA} breaches).`);
   }
 
-  return parts.join(' ').trim();
+  return parts.join('\n\n').trim();
 }
 
 function sortItems(items, mode) {
