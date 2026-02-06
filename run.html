@@ -395,19 +395,36 @@
             const labels = Object.keys(counts);
             const data = Object.values(counts);
             const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
+            const staticColors = {
+                'On Time': '#10b981', 'Breached': '#ef4444',
+                'Small': '#10b981', 'Medium': '#f59e0b', 'Large': '#ef4444',
+                'Low': '#10b981', 'Normal': '#3b82f6', 'High': '#f59e0b', 'Critical': '#ef4444',
+                'New': '#94a3b8', 'Active': '#3b82f6', 'Resolved': '#10b981', 'Closed': '#059669', 'Removed': '#cbd5e1'
+            };
+            
+            const bgColors = labels.map((l, i) => {
+                if (staticColors[l]) return staticColors[l];
+                return colors[i % colors.length];
+            });
 
             chartInstances[cfg.id] = new Chart(ctx, {
                 type: cfg.type,
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Count',
                         data: data,
-                        backgroundColor: cfg.groupBy === 'sla_status' ? ['#10b981', '#ef4444'] : colors,
+                        backgroundColor: bgColors,
                         borderWidth: 1
                     }]
                 },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { position: 'bottom' },
+                        datalabels: { color: '#fff', font: { weight: 'bold' }, formatter: (v) => v > 0 ? v : '' }
+                    } 
+                }
             });
         });
       }
