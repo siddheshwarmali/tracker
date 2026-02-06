@@ -736,6 +736,16 @@
                     else if (lower === 'startat') val = f['Microsoft.VSTS.Common.ActivatedDate'] || f['System.CreatedDate'];
                     else if (lower === 'endat') val = f['Microsoft.VSTS.Common.ClosedDate'];
                     else if (lower === 'threshold') val = 6; // Default
+                    else {
+                        // 3. Suffix / Fuzzy Match (e.g. "Points" -> "...StoryPoints")
+                        const cleanName = lower.replace(/\s+/g, '');
+                        const key = Object.keys(f).find(k => {
+                            const kLow = k.toLowerCase();
+                            // Check if the property name (last part) contains our field ID
+                            return kLow.endsWith('.' + lower) || kLow.includes(cleanName);
+                        });
+                        if (key) val = f[key];
+                    }
                 }
                 
                 // 2. Handle IdentityRef objects (like AssignedTo)
