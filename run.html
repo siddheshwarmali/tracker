@@ -309,7 +309,8 @@
           { id: 'c2', title: 'Ticket Types', type: 'bar', groupBy: 'type' }
         ],
         sections: ['kpi', 'charts', 'summary', 'tickets'],
-        summaryGroupBy: 'type'
+        summaryGroupBy: 'type',
+        sla: { fieldActual: 'actualTime', fieldThreshold: 'threshold', operator: '<=' }
       };
       let chartInstances = {};
       let dirty = false;
@@ -325,11 +326,27 @@
       }
       function clearDirty(){ dirty = false; }
 
+      function checkSla(t) {
+        const cfg = window.runConfig.sla || { fieldActual: 'actualTime', fieldThreshold: 'threshold', operator: '<=' };
+        const act = Number(t[cfg.fieldActual]);
+        const thr = Number(t[cfg.fieldThreshold]);
+        const op = cfg.operator;
+        
+        if (isNaN(act) || isNaN(thr)) return false;
+        
+        if (op === '<=') return act <= thr;
+        if (op === '>=') return act >= thr;
+        if (op === '<') return act < thr;
+        if (op === '>') return act > thr;
+        if (op === '==') return act === thr;
+        return act <= thr;
+      }
+
       function computeTotals(){
         const total = tickets.length;
         let onTime = 0;
         for(const t of tickets){
-          if(Number(t.actualTime) <= Number(t.threshold)) onTime++;
+          if(checkSla(t)) onTime++;
         }
         const breached = total - onTime;
         const sla = total ? ((onTime/total)*100).toFixed(1) : '0.0';
@@ -368,7 +385,7 @@
             tickets.forEach(t => {
                 let key = 'Unknown';
                 if (cfg.groupBy === 'sla_status') {
-                    key = (Number(t.actualTime) <= Number(t.threshold)) ? 'On Time' : 'Breached';
+                    key = checkSla(t) ? 'On Time' : 'Breached';
                 } else {
                     key = t[cfg.groupBy] || 'Unknown';
                 }
@@ -407,7 +424,7 @@
             map[key] = map[key] || { key, total: 0, onTime: 0, breached: 0, totalTime: 0 };
             map[key].total++;
             map[key].totalTime += Number(t.actualTime || 0);
-            if (Number(t.actualTime) <= Number(t.threshold)) map[key].onTime++;
+            if (checkSla(t)) map[key].onTime++;
             else map[key].breached++;
         });
         const data = Object.values(map).sort((a,b) => b.total - a.total);
@@ -813,7 +830,7 @@ async function loadFromWorkspace(id){
 
         const cached = Cache.loadTickets(d);
         if(cached && Array.isArray(cached.tickets)){
-          if(cached.config) { runConfig = cached.config; window.runConfig = runConfig; }
+          if(cached.config) { runConfig = cached.config; window.runConfig = runConfig; if(!runConfig.sla) runConfig.sla = { fieldActual: 'actualTime', fieldThreshold: 'threshold', operator: '<=' }; }
           applyTickets(cached.tickets, 'Cached');
         }else{
           qs('filePill').textContent = 'Loading…';
@@ -824,7 +841,7 @@ async function loadFromWorkspace(id){
           if(token !== loadToken) return;
           const st = resp && resp.state ? resp.state : {};
           const run = st.run || {};
-          if(run.config) { runConfig = run.config; window.runConfig = runConfig; }
+          if(run.config) { runConfig = run.config; window.runConfig = runConfig; if(!runConfig.sla) runConfig.sla = { fieldActual: 'actualTime', fieldThreshold: 'threshold', operator: '<=' }; }
           const serverTickets = Array.isArray(run.tickets) ? run.tickets : [];
           const runUpdatedAt = run.updatedAt || null;
 
@@ -866,6 +883,8 @@ async function loadFromWorkspace(id){
           m.classList.remove('hidden'); m.classList.add('flex');
           renderConfigFields();
           renderConfigCharts();
+          renderConfigSla();
+          renderConfigSummary();
       }
       function closeConfigModal(){ qs('configModal').classList.add('hidden'); qs('configModal').classList.remove('flex'); }
       
@@ -908,6 +927,58 @@ async function loadFromWorkspace(id){
       window.renderConfigCharts = renderConfigCharts;
       window.addConfigChart = function(){ window.runConfig.charts.push({id:'c'+Date.now(), title:'New Chart', type:'bar', groupBy:'type'}); window.renderConfigCharts(); };
       
+      function renderConfigSla(){
+          const c = qs('cfgSlaSettings');
+          if(!c) return;
+          // Ensure SLA config exists
+          if(!window.runConfig.sla) window.runConfig.sla = { fieldActual: 'actualTime', fieldThreshold: 'threshold', operator: '<=' };
+          const sla = window.runConfig.sla;
+          const fields = window.runConfig.fields || [];
+          
+          c.innerHTML = `
+            <div class="grid grid-cols-3 gap-2 text-sm">
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Actual Value Field</label>
+                    <select class="w-full border p-1 rounded" onchange="window.runConfig.sla.fieldActual=this.value">
+                        ${fields.map(f => `<option value="${f.id}" ${f.id===sla.fieldActual?'selected':''}>${esc(f.label)}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Operator</label>
+                    <select class="w-full border p-1 rounded" onchange="window.runConfig.sla.operator=this.value">
+                        <option value="<=" ${sla.operator==='<='?'selected':''}>&le; (Less or Equal)</option>
+                        <option value=">=" ${sla.operator==='>='?'selected':''}>&ge; (Greater or Equal)</option>
+                        <option value="<" ${sla.operator==='<'?'selected':''}>&lt; (Less)</option>
+                        <option value=">" ${sla.operator==='>'?'selected':''}>&gt; (Greater)</option>
+                        <option value="==" ${sla.operator==='=='?'selected':''}>= (Equal)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-500 mb-1">Threshold Field</label>
+                    <select class="w-full border p-1 rounded" onchange="window.runConfig.sla.fieldThreshold=this.value">
+                        ${fields.map(f => `<option value="${f.id}" ${f.id===sla.fieldThreshold?'selected':''}>${esc(f.label)}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+          `;
+      }
+      
+      function renderConfigSummary(){
+          const c = qs('cfgSummarySettings');
+          if(!c) return;
+          const fields = window.runConfig.fields || [];
+          const current = window.runConfig.summaryGroupBy || 'type';
+          
+          c.innerHTML = `
+            <div class="text-sm">
+                <label class="block text-xs text-slate-500 mb-1">Group By Field</label>
+                <select class="w-full border p-1 rounded" onchange="window.runConfig.summaryGroupBy=this.value">
+                    ${fields.map(f => `<option value="${f.id}" ${f.id===current?'selected':''}>${esc(f.label)}</option>`).join('')}
+                </select>
+            </div>
+          `;
+      }
+
       function saveConfig(){
           markDirty();
           closeConfigModal();
@@ -1501,6 +1572,14 @@ async function loadFromWorkspace(id){
           <div class="mb-4">
               <div class="flex justify-between items-center mb-2"><h4 class="font-bold text-xs uppercase text-slate-500">Fields</h4><button onclick="addConfigField()" class="text-xs text-blue-600">+ Add</button></div>
               <div id="cfgFieldsList"></div>
+          </div>
+          <div class="mb-4">
+              <div class="flex justify-between items-center mb-2"><h4 class="font-bold text-xs uppercase text-slate-500">SLA Calculation</h4></div>
+              <div id="cfgSlaSettings" class="bg-slate-50 p-3 rounded border border-slate-200"></div>
+          </div>
+          <div class="mb-4">
+              <div class="flex justify-between items-center mb-2"><h4 class="font-bold text-xs uppercase text-slate-500">Summary Table</h4></div>
+              <div id="cfgSummarySettings" class="bg-slate-50 p-3 rounded border border-slate-200"></div>
           </div>
           <div class="mb-4">
               <div class="flex justify-between items-center mb-2"><h4 class="font-bold text-xs uppercase text-slate-500">Charts</h4><button onclick="addConfigChart()" class="text-xs text-blue-600">+ Add</button></div>
