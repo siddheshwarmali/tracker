@@ -948,6 +948,18 @@ input[type="submit"] {
             <div class="bg-blue-50 p-3 rounded-lg border border-blue-200 text-sm text-blue-800 mb-4"><p><strong>Note on CORS:</strong> Direct API calls from local files (`file://`) are blocked by modern browsers.</p></div>
             <div id="ado-error" class="hidden bg-red-50 p-3 rounded-lg border border-red-200 text-sm text-red-800 mb-4 break-words"></div>
             <div class="space-y-4 mb-6"><div><label class="block text-sm font-medium text-gray-700 mb-1">Organization</label><input type="text" id="ado-org" value="BFLDevOpsOrg" class="w-full border border-gray-300 rounded-lg p-2"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Project</label><input type="text" id="ado-proj" value="3in1 Agile Board_MarTech" class="w-full border border-gray-300 rounded-lg p-2"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Query ID</label><input type="text" id="ado-query" value="3a6725c4-6a00-43ff-ac2a-ed550c633088" class="w-full border border-gray-300 rounded-lg p-2 font-mono text-sm"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">PAT Token</label><input type="password" id="ado-pat" class="w-full border border-gray-300 rounded-lg p-2" placeholder="Enter your Personal Access Token"></div></div>
+            
+            <div class="border-t pt-4 mb-4">
+                <label class="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                    <input type="checkbox" id="ado-auto" class="w-4 h-4 text-blue-600 rounded"> Enable Auto-Sync
+                </label>
+                <div class="flex items-center gap-2 text-sm text-gray-600 pl-6">
+                    <span>Sync every</span>
+                    <input type="number" id="ado-interval" class="w-16 border border-gray-300 rounded p-1 text-center" value="15" min="1">
+                    <span>minutes</span>
+                </div>
+            </div>
+
             <div class="flex justify-end space-x-3"><button onclick="loadMockAdoData()" class="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-200">Load Mock Data (Demo)</button><button onclick="closeModal('modal-ado')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">Cancel</button><button id="btn-sync-ado" onclick="handleAdoSync()" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center">Sync Now</button></div>
         </div>
     </div>
@@ -1088,6 +1100,7 @@ input[type="submit"] {
         let savedSummaryText = null;
         let adoSyncSource = null;
         let adoSyncTrackerId = null;
+        let autoSyncTimers = {};
 
         // --- REPORTING LOGIC ---
         const reportSections = [
@@ -1906,7 +1919,7 @@ input[type="submit"] {
                     const style = `border-color: ${color}; background-color: ${act ? color + '15' : '#ffffff'}; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);`;
                     const textStyle = `color: ${color};`;
 
-                    return `<div onclick="setActiveCustomGroupValue('${ct.id}', '${groupValue}')" ondblclick="openDetailsModalForGroup('${ct.id}', '${groupByField}', '${groupValue}')" class="cursor-pointer rounded-lg p-4 border-2 transition-all" style="${style}"><div class="flex justify-between mb-2"><span class="text-sm font-bold" style="${textStyle}">${groupValue}</span></div><div class="text-3xl font-extrabold text-gray-800">${counts[groupValue]}</div><div class="text-xs text-gray-500 mt-1">Items</div></div>`;
+                    return `<div data-group-value="${groupValue}" onclick="setActiveCustomGroupValue('${ct.id}', '${groupValue}')" ondblclick="openDetailsModalForGroup('${ct.id}', '${groupByField}', '${groupValue}')" class="cursor-pointer rounded-lg p-4 border-2 transition-all" style="${style}"><div class="flex justify-between mb-2"><span class="text-sm font-bold" style="${textStyle}">${groupValue}</span></div><div class="text-3xl font-extrabold text-gray-800">${counts[groupValue]}</div><div class="text-xs text-gray-500 mt-1">Items</div></div>`;
                 }).join('');
 
                 const sectionId = `section-${ct.id}`;
@@ -1958,7 +1971,25 @@ input[type="submit"] {
 
         function setActiveCustomGroupValue(trackerId, groupValue) {
             activeCustomStages[trackerId] = groupValue;
-            renderCustomTrackers();
+            // renderCustomTrackers(); // Removed to prevent blinking
+
+            // Targeted DOM update for smoother UX
+            const section = document.getElementById('section-' + trackerId);
+            if (!section) return;
+            const ct = customTrackers.find(t => t.id === trackerId);
+            if (!ct) return;
+            
+            const isGroupingByStage = (ct.groupBy || 'stage') === 'stage';
+            const tiles = section.querySelectorAll('[data-group-value]');
+            
+            tiles.forEach(el => {
+                const val = el.getAttribute('data-group-value');
+                const act = val === groupValue;
+                const color = (isGroupingByStage && ct.stageColors && ct.stageColors[val]) ? ct.stageColors[val] : '#6366f1';
+                
+                el.style.borderColor = color;
+                el.style.backgroundColor = act ? (color + '15') : '#ffffff';
+            });
         }
 
         function openDetailsModalForGroup(trackerId, groupByField, groupValue) {
@@ -2330,7 +2361,34 @@ function renderBlockers() {
         function toggleL2Details(disc) { if (disc === 'ALL') expandedDiscipline = expandedDiscipline === 'ALL' ? null : 'ALL'; else expandedDiscipline = expandedDiscipline === disc ? null : disc; renderDisciplineTable(); renderL2Details(); }
         function renderL2EditMode() { const content = document.getElementById('disc-tab-content'); let html = `<div class="bg-gray-50 p-4 rounded mb-4 border border-gray-200"><div class="flex justify-between mb-2"><h4 class="font-bold text-sm text-gray-700">Manage Columns</h4><button onclick="addL2Col()" class="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100">+ Add Column</button></div><div class="flex flex-wrap gap-2">${l2Columns.map((c, i) => `<div class="flex items-center bg-white border rounded"><input value="${c.name}" onchange="updL2ColName(${i},this.value)" class="p-1 text-xs w-20 outline-none rounded-l focus:ring-1 focus:ring-teal-500"><button onclick="delL2Col(${i})" class="text-red-500 px-2 hover:bg-red-50 border-l">×</button></div>`).join('')}</div></div><div class="space-y-4">`; Object.keys(l2Data).forEach(disc => { html += `<div class="border rounded p-3"><div class="flex justify-between mb-2"><h5 class="font-bold text-sm text-gray-700">${disc}</h5><button onclick="addL2Row('${disc}')" class="text-xs text-teal-700 bg-teal-50 px-2 py-1 rounded border border-teal-100 hover:bg-teal-100">+ Add Row</button></div><table class="w-full text-xs"><thead><tr><th class="text-left font-medium text-gray-500">Feature</th>${l2Columns.map(c=>`<th class="text-center font-medium text-gray-500">${c.name}</th>`).join('')}<th></th></tr></thead><tbody>${l2Data[disc].map((r, ri) => `<tr><td class="p-1"><input value="${r.feature||''}" onchange="updL2Cell('${disc}',${ri},'feature',this.value)" class="w-full border p-1 rounded"></td>${l2Columns.map(c => `<td class="p-1"><input value="${r[c.id]||''}" onchange="updL2Cell('${disc}',${ri},'${c.id}',this.value)" class="w-full border p-1 rounded text-center"></td>`).join('')}<td class="p-1 text-right"><button onclick="delL2Row('${disc}',${ri})" class="text-red-500 hover:text-red-700">×</button></td></tr>`).join('')}</tbody></table></div>`; }); html += `</div>`; content.innerHTML = html; }
 
-        function openAdoModal(source = 'build', trackerId = null) { adoSyncSource = source; adoSyncTrackerId = trackerId; document.getElementById('modal-ado').classList.add('open'); document.getElementById('ado-error').classList.add('hidden'); }
+        function openAdoModal(source = 'build', trackerId = null) { 
+            adoSyncSource = source; 
+            adoSyncTrackerId = trackerId; 
+            
+            // Reset inputs
+            document.getElementById('ado-org').value = '';
+            document.getElementById('ado-proj').value = '';
+            document.getElementById('ado-query').value = '';
+            document.getElementById('ado-pat').value = '';
+            document.getElementById('ado-auto').checked = false;
+            document.getElementById('ado-interval').value = 15;
+
+            // Load existing config if available
+            if (source === 'custom' && trackerId) {
+                const t = customTrackers.find(x => x.id === trackerId);
+                if (t && t.adoConfig) {
+                    document.getElementById('ado-org').value = t.adoConfig.org || '';
+                    document.getElementById('ado-proj').value = t.adoConfig.project || '';
+                    document.getElementById('ado-query').value = t.adoConfig.queryId || '';
+                    document.getElementById('ado-pat').value = t.adoConfig.pat || '';
+                    document.getElementById('ado-auto').checked = !!t.adoConfig.autoSync;
+                    document.getElementById('ado-interval').value = t.adoConfig.interval || 15;
+                }
+            }
+
+            document.getElementById('modal-ado').classList.add('open'); 
+            document.getElementById('ado-error').classList.add('hidden'); 
+        }
 
         async function handleAdoSync() {
             const org = document.getElementById('ado-org').value.trim();
@@ -2339,22 +2397,16 @@ function renderBlockers() {
             const pat = document.getElementById('ado-pat').value.trim();
             const errorEl = document.getElementById('ado-error');
             const btn = document.getElementById('btn-sync-ado');
+            const autoSync = document.getElementById('ado-auto').checked;
+            const interval = parseInt(document.getElementById('ado-interval').value) || 15;
 
             if (!org || !project || !queryId || !pat) { errorEl.textContent = "Please fill in all fields."; errorEl.classList.remove('hidden'); return; }
 
             btn.disabled = true; btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 mr-2 animate-spin"></i> Syncing...`; lucide.createIcons(); errorEl.classList.add('hidden');
 
             try {
-                const authHeader = 'Basic ' + btoa(':' + pat);
-                const baseUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis`;
-                const queryResponse = await fetch(`${baseUrl}/wit/wiql/${queryId}?api-version=6.0`, { method: 'GET', headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' } });
-                if (!queryResponse.ok) throw new Error(`Query Failed: ${queryResponse.status}`);
-                const queryData = await queryResponse.json();
-                if (!queryData.workItems || queryData.workItems.length === 0) throw new Error("0 work items.");
-                const ids = queryData.workItems.slice(0, 200).map(wi => wi.id).join(',');
-                const detailsResponse = await fetch(`${baseUrl}/wit/workitems?ids=${ids}&api-version=6.0`, { method: 'GET', headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' } });
-                if (!detailsResponse.ok) throw new Error(`Details Failed`);
-                const detailsData = await detailsResponse.json();
+                const config = { org, project, queryId, pat };
+                const detailsData = await executeAdoFetch(config);
                 
                 if (adoSyncSource === 'run') {
                     const processedTickets = detailsData.value.map(item => {
@@ -2370,6 +2422,10 @@ function renderBlockers() {
                 } else if (adoSyncSource === 'custom' && adoSyncTrackerId) {
                     const tracker = customTrackers.find(t => t.id === adoSyncTrackerId);
                     if (tracker) {
+                        // Save Config
+                        tracker.adoConfig = { org, project, queryId, pat, autoSync, interval };
+                        setupAutoSync(); // Refresh timers
+
                         tracker.items = detailsData.value.map(item => {
                             const f = item.fields; 
                             const adoState = f['System.State'] || '';
@@ -2430,6 +2486,95 @@ function renderBlockers() {
                 }
                 closeModal('modal-ado'); alert(`Synced ${detailsData.value.length} items!`);
             } catch (error) { errorEl.textContent = error.message; errorEl.classList.remove('hidden'); } finally { btn.disabled = false; btn.innerHTML = `Sync Now`; lucide.createIcons(); }
+        }
+
+        async function executeAdoFetch(config) {
+            const { org, project, queryId, pat } = config;
+            const authHeader = 'Basic ' + btoa(':' + pat);
+            const baseUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis`;
+            const queryResponse = await fetch(`${baseUrl}/wit/wiql/${queryId}?api-version=6.0`, { method: 'GET', headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' } });
+            if (!queryResponse.ok) throw new Error(`Query Failed: ${queryResponse.status}`);
+            const queryData = await queryResponse.json();
+            if (!queryData.workItems || queryData.workItems.length === 0) throw new Error("0 work items.");
+            const ids = queryData.workItems.slice(0, 200).map(wi => wi.id).join(',');
+            const detailsResponse = await fetch(`${baseUrl}/wit/workitems?ids=${ids}&api-version=6.0`, { method: 'GET', headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' } });
+            if (!detailsResponse.ok) throw new Error(`Details Failed`);
+            return await detailsResponse.json();
+        }
+
+        function setupAutoSync() {
+            // Clear existing
+            Object.values(autoSyncTimers).forEach(t => clearInterval(t));
+            autoSyncTimers = {};
+
+            customTrackers.forEach(t => {
+                if (t.adoConfig && t.adoConfig.autoSync) {
+                    const min = Math.max(1, parseInt(t.adoConfig.interval) || 15);
+                    console.log(`Starting auto-sync for ${t.title} every ${min} mins`);
+                    autoSyncTimers[t.id] = setInterval(() => runBackgroundAdoSync(t.id), min * 60 * 1000);
+                }
+            });
+        }
+
+        async function runBackgroundAdoSync(trackerId) {
+            const tracker = customTrackers.find(t => t.id === trackerId);
+            if (!tracker || !tracker.adoConfig) return;
+            
+            try {
+                const detailsData = await executeAdoFetch(tracker.adoConfig);
+                
+                tracker.items = detailsData.value.map(item => {
+                    const f = item.fields; 
+                    const adoState = f['System.State'] || '';
+                    let mappedStage = tracker.stages ? tracker.stages[0] : 'New';
+
+                    if (tracker.stages && tracker.stages.length > 0) {
+                        const match = tracker.stages.find(s => s === adoState || s.toLowerCase() === adoState.toLowerCase());
+                        if (match) mappedStage = match;
+                    }
+
+                    const obj = { id: String(item.id), type: f['System.WorkItemType'] || 'Task', description: f['System.Title'], stage: mappedStage, owner: f['System.AssignedTo']?.displayName || 'Unassigned', eta: '-' };
+                    
+                    if (tracker.fields) {
+                        obj.custom = {};
+                        tracker.fields.forEach(cf => {
+                            const name = cf.name;
+                            let val = f[name];
+                            if (val === undefined) {
+                                const lowerName = name.toLowerCase();
+                                if (lowerName === 'id') { val = item.id; } 
+                                else if (['owner', 'assigned', 'assigned to', 'assignee'].includes(lowerName)) { val = f['System.AssignedTo']; } 
+                                else if (['state', 'status'].includes(lowerName)) { val = f['System.State']; } 
+                                else if (['title', 'summary'].includes(lowerName)) { val = f['System.Title']; } 
+                                else {
+                                    const cleanName = lowerName.replace(/\s+/g, '');
+                                    const key = Object.keys(f).find(k => {
+                                        const kLow = k.toLowerCase();
+                                        return kLow === lowerName || kLow.endsWith('.' + lowerName) || kLow.endsWith('.' + cleanName);
+                                    });
+                                    if (key) val = f[key];
+                                }
+                            }
+                            if (val && typeof val === 'object' && val.displayName) { val = val.displayName; }
+                            obj.custom[name] = (val !== undefined && val !== null) ? val : '';
+                        });
+                    }
+                    return obj;
+                });
+
+                // Update UI if this tracker is visible
+                const section = document.getElementById('section-' + tracker.id);
+                if (section) {
+                    renderCustomTrackers();
+                    renderSummary();
+                }
+                
+                // Auto-save to persist synced data
+                if (typeof wsSaveNow === 'function') wsSaveNow({ prompt: false }).catch(e => console.warn('Auto-save failed', e));
+
+            } catch (e) {
+                console.error(`Auto-sync failed for ${tracker.title}:`, e);
+            }
         }
 
         function loadMockAdoData() {
@@ -2765,6 +2910,7 @@ function renderBlockers() {
                     try { if (typeof renderAll === 'function') renderAll(); } catch (e) {}
                     try { if (typeof loadedTicketData !== 'undefined' && loadedTicketData && typeof generateDashboard === 'function') generateDashboard(); } catch (e) {}
                 }
+                setupAutoSync(); // Initialize auto-sync timers
             } finally {
                 wsIsApplying = false;
             }
