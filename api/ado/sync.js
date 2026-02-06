@@ -67,16 +67,6 @@ module.exports = async (req, res) => {
     const ids = workItems.map(wi => wi.id);
     
     // 3. Batch Get Details (Chunking to bypass 200 limit)
-    const fields = [
-      "System.Id", "System.Title", "System.State", "System.WorkItemType", 
-      "System.AssignedTo", "System.Tags", "System.Description", "System.CreatedDate",
-      "System.AreaPath", "System.IterationPath",
-      "Microsoft.VSTS.Common.Priority", "Microsoft.VSTS.Common.Severity",
-      "Microsoft.VSTS.Scheduling.StoryPoints", "Microsoft.VSTS.Scheduling.Effort",
-      "Microsoft.VSTS.Scheduling.OriginalEstimate", "Microsoft.VSTS.Scheduling.CompletedWork",
-      "Microsoft.VSTS.Common.ActivatedDate", "Microsoft.VSTS.Common.ClosedDate"
-    ];
-
     const chunks = [];
     for (let i = 0; i < ids.length; i += 200) {
       chunks.push(ids.slice(i, i + 200));
@@ -88,7 +78,7 @@ module.exports = async (req, res) => {
       const batchResp = await fetch(batchUrl, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ ids: chunk, fields })
+        body: JSON.stringify({ ids: chunk })
       });
       if(!batchResp.ok) {
         console.error('Batch fetch failed', await batchResp.text());
