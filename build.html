@@ -2424,12 +2424,6 @@ function renderBlockers() {
                     if (tracker) {
                         // Save Config
                         tracker.adoConfig = { org, project, queryId, pat, autoSync, interval };
-
-                        // Persist the new ADO config immediately without a prompt
-                        if (typeof wsSaveNow === 'function') {
-                            wsSaveNow({ prompt: false }).catch(e => console.warn('Auto-save of ADO config failed', e));
-                        }
-
                         setupAutoSync(); // Refresh timers
 
                         tracker.items = detailsData.value.map(item => {
@@ -2488,6 +2482,11 @@ function renderBlockers() {
                             return obj;
                         });
                         renderCustomTrackers();
+
+                        // Persist the new ADO config AND items immediately without a prompt
+                        if (typeof wsSaveNow === 'function') {
+                            wsSaveNow({ prompt: false }).catch(e => console.warn('Auto-save of ADO config failed', e));
+                        }
                     }
                 }
                 closeModal('modal-ado'); alert(`Synced ${detailsData.value.length} items!`);
