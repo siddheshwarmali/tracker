@@ -41,7 +41,7 @@ module.exports = async (req, res) => {
     };
 
     // 1. Get WIQL
-    const qUrl = `${baseUrl}/wit/wiql/${queryId}?api-version=6.0`;
+    const qUrl = `${baseUrl}/wit/queries/${encodeURIComponent(queryId)}?$expand=wiql&api-version=6.0`;
     const qResp = await fetch(qUrl, { method: 'GET', headers });
     if(!qResp.ok) {
       const txt = await qResp.text();
