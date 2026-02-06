@@ -59,13 +59,21 @@ module.exports = async (req, res) => {
     }
     const wiqlJson = await wiqlResp.json();
     
-    const workItems = wiqlJson.workItems || [];
-    if(workItems.length === 0) {
+    // Handle both Flat List (workItems) and Tree/Direct Links (workItemRelations)
+    let ids = [];
+    if (wiqlJson.workItems) {
+      ids = wiqlJson.workItems.map(wi => wi.id);
+    } else if (wiqlJson.workItemRelations) {
+      ids = wiqlJson.workItemRelations.map(wi => wi.target ? wi.target.id : wi.id).filter(id => id);
+    }
+    
+    // Deduplicate IDs
+    ids = [...new Set(ids)];
+
+    if (ids.length === 0) {
       return json(res, 200, { value: [] });
     }
 
-    const ids = workItems.map(wi => wi.id);
-    
     // 3. Batch Get Details (Chunking to bypass 200 limit)
     const chunks = [];
     for (let i = 0; i < ids.length; i += 200) {
