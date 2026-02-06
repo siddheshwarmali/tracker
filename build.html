@@ -2380,7 +2380,9 @@ function renderBlockers() {
                     document.getElementById('ado-org').value = t.adoConfig.org || '';
                     document.getElementById('ado-proj').value = t.adoConfig.project || '';
                     document.getElementById('ado-query').value = t.adoConfig.queryId || '';
-                    document.getElementById('ado-pat').value = t.adoConfig.pat || '';
+                    let val = t.adoConfig.pat || '';
+                    if (t.adoConfig.isEncoded) { try { val = atob(val); } catch(e){} }
+                    document.getElementById('ado-pat').value = val;
                     document.getElementById('ado-auto').checked = !!t.adoConfig.autoSync;
                     document.getElementById('ado-interval').value = t.adoConfig.interval || 15;
                 }
@@ -2423,7 +2425,8 @@ function renderBlockers() {
                     const tracker = customTrackers.find(t => t.id === adoSyncTrackerId);
                     if (tracker) {
                         // Save Config
-                        tracker.adoConfig = { org, project, queryId, pat, autoSync, interval };
+                        const safePat = btoa(pat);
+                        tracker.adoConfig = { org, project, queryId, pat: safePat, isEncoded: true, autoSync, interval };
                         setupAutoSync(); // Refresh timers
 
                         tracker.items = detailsData.value.map(item => {
@@ -2523,7 +2526,11 @@ function renderBlockers() {
             if (!tracker || !tracker.adoConfig) return;
             
             try {
-                const detailsData = await executeAdoFetch(tracker.adoConfig);
+                let syncConfig = { ...tracker.adoConfig };
+                if (syncConfig.isEncoded && syncConfig.pat) {
+                    try { syncConfig.pat = atob(syncConfig.pat); } catch(e) {}
+                }
+                const detailsData = await executeAdoFetch(syncConfig);
                 
                 tracker.items = detailsData.value.map(item => {
                     const f = item.fields; 
