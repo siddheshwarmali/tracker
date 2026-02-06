@@ -166,12 +166,20 @@ module.exports = async (req, res) => {
       rec.updatedAt = now;
       dashboards[dash] = rec;
 
-      await ghPutFileRetry(
-        d.path, 
-        JSON.stringify({ id: dash, name: rec.name, state: nextState }, null, 2), 
-        `update ${dash}`, 
-        d.sha
-      );
+      try {
+        await ghPutFileRetry(
+          d.path, 
+          JSON.stringify({ id: dash, name: rec.name, state: nextState }, null, 2), 
+          `update ${dash}`, 
+          d.sha
+        );
+      } catch (err) {
+        const msg = err.message || '';
+        if (msg.toLowerCase().includes('secret') || msg.toLowerCase().includes('validation')) {
+          return json(res, 400, { error: 'Save rejected by repository: Secret detected. Please remove sensitive tokens or check your repository settings.' });
+        }
+        throw err;
+      }
       await saveIndex(dashboards);
       return json(res, 200, { ok: true });
     }
