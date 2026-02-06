@@ -719,17 +719,28 @@
             runConfig.fields.forEach(field => {
                 // Smart Mapping Logic
                 let val = f[field.id];
+                
+                // 1. Try case-insensitive match for field ID (e.g. "system.state" -> "System.State")
+                if (val === undefined) {
+                    const key = Object.keys(f).find(k => k.toLowerCase() === field.id.toLowerCase());
+                    if (key) val = f[key];
+                }
+
                 if (val === undefined) {
                     const lower = field.id.toLowerCase();
                     if (lower === 'id') val = wi.id;
                     else if (lower === 'title') val = f['System.Title'];
                     else if (lower === 'type') val = f['System.WorkItemType'];
                     else if (lower === 'state') val = f['System.State'];
-                    else if (lower === 'assigned') val = f['System.AssignedTo']?.displayName;
+                    else if (lower === 'assigned') val = f['System.AssignedTo'];
                     else if (lower === 'startat') val = f['Microsoft.VSTS.Common.ActivatedDate'] || f['System.CreatedDate'];
                     else if (lower === 'endat') val = f['Microsoft.VSTS.Common.ClosedDate'];
                     else if (lower === 'threshold') val = 6; // Default
                 }
+                
+                // 2. Handle IdentityRef objects (like AssignedTo)
+                if (val && typeof val === 'object' && val.displayName) val = val.displayName;
+                
                 t[field.id] = val;
             });
             
