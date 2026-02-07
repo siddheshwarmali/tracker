@@ -1210,7 +1210,13 @@ async function loadFromWorkspace(id){
           
           // 1. Tickets
           if(tickets.length){
-            const ws = XLSX.utils.json_to_sheet(tickets);
+            const fields = cfg.fields || [];
+            const exportData = tickets.map(t => {
+              const row = {};
+              fields.forEach(f => { row[f.label || f.id] = t[f.id]; });
+              return row;
+            });
+            const ws = XLSX.utils.json_to_sheet(exportData);
             XLSX.utils.book_append_sheet(wb, ws, "Tickets");
           } else {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{Info:"No tickets"}]), "Tickets");
