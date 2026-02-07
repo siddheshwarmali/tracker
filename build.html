@@ -450,8 +450,8 @@ input[type="submit"] {
       </div>
     </div>
 
-    <div class="w-full sm:w-auto grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:justify-end">
-      <select id="ws-select" class="ml-0 sm:ml-1 col-span-2 sm:col-auto w-full sm:w-56 px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+    <div class="w-full sm:w-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-end">
+      <select id="ws-select" class="w-full sm:w-56 px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">Loading…</option>
                     </select>
                     <span id="ws-saved-indicator" class="text-xs text-gray-500 ml-2">Not saved</span>
@@ -459,7 +459,8 @@ input[type="submit"] {
       <!-- Publish/Private pill (optional, reused from Run ids) -->
       <span id="ws-indicator" class="text-xs text-slate-600 px-2 py-1 rounded-full bg-slate-50 border border-slate-200 ml-2"></span>
 
-      <div class="relative">
+      <div class="flex items-center gap-2 w-full sm:w-auto">
+      <div class="relative flex-1 sm:flex-none">
   <button id="ws-actions-btn" type="button"
     class="px-3 py-2 text-sm bg-slate-100 text-slate-800 rounded-md hover:bg-slate-200 flex items-center gap-2 active:scale-[0.99] transition"
     aria-haspopup="menu" aria-controls="ws-actions-menu" aria-expanded="false">
@@ -486,7 +487,7 @@ input[type="submit"] {
   </div>
 </div>
 
-      <div class="relative">
+      <div class="relative flex-none">
           <button id="tw-menu-btn" class="w-10 h-10 rounded-xl bg-slate-900 text-white font-black flex items-center justify-center">☰</button>
           <div id="tw-menu" class="hidden absolute right-0 mt-2 w-80 bg-white text-slate-900 border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
             <div class="px-4 py-3 border-b bg-slate-50">
@@ -506,6 +507,7 @@ input[type="submit"] {
             </div>
           </div>
         </div>
+      </div>
 
       <input type="file" id="ws-import-file" accept="application/json" class="hidden" />
     </div>
@@ -606,6 +608,7 @@ input[type="submit"] {
                             onclick="handleHeaderClick(openMilestoneModal, 'milestone-upload-controls')"
                             title="Click to Add Milestone | Double click to Toggle Upload">
                             Project Milestones - Application Tracker
+                            <button onclick="configureMilestones(); event.stopPropagation();" class="ml-2 text-gray-400 hover:text-blue-600 transition-opacity" title="Configure Fields"><i data-lucide="settings" class="w-4 h-4 inline"></i></button>
                         </h3>
                         <div class="flex items-center space-x-2 no-print">
                             <div id="milestone-upload-controls" class="hidden flex items-center space-x-2">
@@ -906,12 +909,45 @@ input[type="submit"] {
         </div>
     </div>
 
+    <!-- Configure Milestone Modal -->
+    <div id="modal-milestone-config" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-[95%] sm:w-full max-w-lg flex flex-col max-h-[85vh] animate-fade-in overflow-hidden">
+            <div class="flex justify-between items-center p-4 border-b bg-gray-50">
+                <h3 class="text-lg font-bold text-gray-800">Configure Fields</h3>
+                <button onclick="closeModal('modal-milestone-config')" class="text-gray-500 hover:text-gray-700"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scroll p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <p class="text-sm text-gray-500">Define custom fields (e.g. Budget, Vendor).</p>
+                    <button onclick="addMilestoneConfigField()" class="flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full hover:bg-indigo-100 font-medium transition-colors">
+                        <i data-lucide="plus" class="w-3 h-3"></i> Add Field
+                    </button>
+                </div>
+                <div id="ms-cfg-fields-container" class="space-y-2"></div>
+            </div>
+            <div class="p-4 border-t bg-gray-50 flex justify-end gap-2">
+                <button onclick="closeModal('modal-milestone-config')" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
+                <button onclick="saveMilestoneConfig()" class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 shadow-sm">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Milestone Modal -->
     <div id="modal-milestone" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md animate-fade-in">
-            <div class="flex justify-between items-center mb-6"><h3 class="text-xl font-bold text-gray-800" id="milestone-modal-title">Add New Milestone</h3><button onclick="closeModal('modal-milestone')"><i data-lucide="x" class="w-6 h-6 text-gray-500"></i></button></div>
-            <div class="space-y-4"><input type="hidden" id="ms-index"><div><label class="block text-sm font-medium text-gray-700 mb-1">Activity Name *</label><input type="text" id="ms-phase" class="w-full border border-gray-300 rounded-lg p-2"></div><div class="grid grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Planned Start *</label><input type="date" id="ms-start" class="w-full border border-gray-300 rounded-lg p-2"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Planned End *</label><input type="date" id="ms-end" class="w-full border border-gray-300 rounded-lg p-2"></div></div><div class="grid grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-gray-700 mb-1">Actual Start</label><input type="date" id="ms-act-start" class="w-full border border-gray-300 rounded-lg p-2"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Actual End</label><input type="date" id="ms-act-end" class="w-full border border-gray-300 rounded-lg p-2"></div></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Owner</label><input type="text" id="ms-owner" class="w-full border border-gray-300 rounded-lg p-2" placeholder="Owner name"></div><div><label class="block text-sm font-medium text-gray-700 mb-1">Remark</label><textarea id="ms-remark" class="w-full border border-gray-300 rounded-lg p-2 h-20"></textarea></div></div>
-            <div class="flex justify-end space-x-3 mt-6"><button id="btn-delete-ms" onclick="deleteMilestone()" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium mr-auto hidden">Delete</button><button onclick="closeModal('modal-milestone')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">Cancel</button><button onclick="saveMilestone()" class="px-6 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">Save</button></div>
+        <div class="bg-white rounded-xl shadow-2xl w-[95%] sm:w-full max-w-md flex flex-col max-h-[85vh] animate-fade-in overflow-hidden">
+            <div class="flex justify-between items-center p-4 border-b bg-gray-50">
+                <h3 class="text-xl font-bold text-gray-800" id="milestone-modal-title">Add New Milestone</h3>
+                <button onclick="closeModal('modal-milestone')" class="text-gray-500 hover:text-gray-700"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scroll p-4">
+                <input type="hidden" id="ms-index">
+                <div id="ms-form-container" class="space-y-4"></div>
+            </div>
+            <div class="p-4 border-t bg-gray-50 flex justify-end gap-2">
+                <button id="btn-delete-ms" onclick="deleteMilestone()" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium mr-auto hidden">Delete</button>
+                <button onclick="closeModal('modal-milestone')" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
+                <button onclick="saveMilestone()" class="px-6 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 shadow-sm">Save</button>
+            </div>
         </div>
     </div>
 
@@ -1074,6 +1110,7 @@ input[type="submit"] {
 
         // --- GLOBAL VARIABLES (Dashboard) ---
         let milestones = [];
+        let milestoneSchema = []; // [{name, type}]
         let customTrackers = []; // [{ id, title, items: [] }]
         let blockers = [];
         let kpiData = [];
@@ -1294,15 +1331,33 @@ input[type="submit"] {
                     let sheetName = w.SheetNames[0];
                     const j = XLSX.utils.sheet_to_json(w.Sheets[sheetName]);
                     if(type === 'milestones') {
-                        milestones = j.map((r,i) => ({
-                            phase: r.Activity || r.activity || `Phase ${i+1}`, 
-                            startDate: parseXlsDate(r['Start Date']||r.startDate), 
-                            endDate: parseXlsDate(r['End Date']||r.endDate),
-                            actualStartDate: parseXlsDate(r['Actual Start Date']||r.actualStartDate), 
-                            actualEndDate: parseXlsDate(r['Actual End Date']||r.actualEndDate), 
-                            owner: r['Owner']||r.owner||r['owner']||'',
-                            remark: r.Remark||r.remark||''
-                        }));
+                        milestones = j.map((r,i) => {
+                            const m = {};
+                            // Ensure schema exists
+                            ensureMilestoneSchema();
+                            
+                            // Map based on schema labels
+                            milestoneSchema.forEach(f => {
+                                // Try exact label match first, then key match
+                                let val = r[f.label] || r[f.key];
+                                
+                                // Case-insensitive fallback
+                                if(val === undefined) {
+                                    const key = Object.keys(r).find(k => k.toLowerCase() === f.label.toLowerCase() || k.toLowerCase() === f.key.toLowerCase());
+                                    if(key) val = r[key];
+                                }
+
+                                if (f.type === 'date' && val) val = parseXlsDate(val);
+                                m[f.key] = val !== undefined ? val : '';
+                            });
+
+                            // Fallbacks for critical timeline fields if missing from schema or file
+                            if(!m.phase) m.phase = r.Activity || r.activity || `Phase ${i+1}`;
+                            if(!m.startDate) m.startDate = parseXlsDate(r['Start Date']||r.startDate);
+                            if(!m.endDate) m.endDate = parseXlsDate(r['End Date']||r.endDate);
+                            
+                            return m;
+                        });
                         renderMilestones();
             } else if(type === 'kpi') {
                         let lastCategory = 'General';
@@ -1484,11 +1539,46 @@ input[type="submit"] {
             const container = document.getElementById('milestone-cards');
             container.innerHTML = milestones.map((m, i) => {
                 const { tracker, execLabel, execColor } = calculateStatus(m);
-                let badgeColor = 'bg-gray-100 text-gray-800';
-                if(tracker === 'On Track') badgeColor = 'bg-green-100 text-green-800 border-green-200';
-                if(tracker === 'Delayed') badgeColor = 'bg-red-100 text-red-800 border-red-200';
-                return `<div class="bg-white rounded-lg p-3 border border-gray-200 flex flex-col min-w-[160px] max-w-[180px] shadow-sm hover:border-blue-400 cursor-pointer" onclick="openMilestoneModal(${i})"><p class="text-xs font-bold text-gray-800 mb-2 text-center h-8 flex items-center justify-center break-words">${m.phase}</p><div class="flex-1 space-y-2 mb-2"><div class="bg-blue-50 p-1.5 rounded text-[10px]"><p class="font-bold text-blue-700">Planned</p><p>S: ${m.startDate || '-'}</p><p>E: ${m.endDate || '-'}</p></div><div class="bg-green-50 p-1.5 rounded text-[10px]"><p class="font-bold text-green-700">Actual</p><p>S: ${m.actualStartDate || '-'}</p><p>E: ${m.actualEndDate || '-'}</p></div></div><div class="bg-amber-50 p-1.5 rounded text-[10px]"><p class="font-bold text-amber-700">Owner</p><p>${m.owner || '-'}</p></div><div class="mb-2 px-1 border-t border-gray-50 pt-1">${m.remark ? `<div class="bg-gray-50 p-1 rounded border border-gray-100 mb-1"><p class="text-[10px] text-gray-600 line-clamp-2" title="${m.remark}">R: ${m.remark}</p></div>` : ''}<div class="flex justify-between items-center"><span class="text-[10px] text-gray-500 font-medium">Status:</span><span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${execColor}">${execLabel}</span></div></div><div class="mt-auto pt-2 border-t border-gray-100"><span class="block text-center text-[10px] px-2 py-1 rounded-full font-bold border ${badgeColor}">${tracker}</span></div></div>`;
+                let badgeColor = 'bg-gray-100 text-gray-600 border-gray-200';
+                if(tracker === 'On Track') badgeColor = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                if(tracker === 'Delayed') badgeColor = 'bg-rose-100 text-rose-800 border-rose-200';
+                if(tracker === 'Completed') badgeColor = 'bg-green-100 text-green-800 border-green-200';
+                if(tracker === 'Done Late') badgeColor = 'bg-amber-100 text-amber-800 border-amber-200';
+                
+                // Dynamic fields display based on schema
+                ensureMilestoneSchema();
+                // Filter out phase (title) and remark (long text) for the grid
+                const gridFields = milestoneSchema.filter(f => f.key !== 'phase' && f.key !== 'remark');
+                const remarkField = milestoneSchema.find(f => f.key === 'remark');
+
+                const fieldsHtml = gridFields.map(f => {
+                    const val = m[f.key] || '-';
+                    return `<div class="flex flex-col"><span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">${f.label}</span><span class="text-xs font-medium text-gray-700 truncate" title="${val}">${val}</span></div>`;
+                }).join('');
+
+                const remarkHtml = remarkField && m[remarkField.key] ? `<div class="mt-2 pt-2 border-t border-gray-50"><span class="text-[10px] text-gray-400 uppercase font-bold">Remark</span><p class="text-xs text-gray-600 line-clamp-2" title="${m[remarkField.key]}">${m[remarkField.key]}</p></div>` : '';
+
+                return `
+                <div class="bg-white rounded-xl p-3 border border-gray-200 flex flex-col min-w-[200px] max-w-[220px] shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group" onclick="openMilestoneModal(${i})">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded border ${execColor}">${execLabel}</span>
+                        <i data-lucide="edit-2" class="w-3 h-3 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                    </div>
+                    <p class="text-sm font-bold text-gray-800 mb-3 leading-tight line-clamp-2 h-10" title="${m.phase}">${m.phase}</p>
+                    
+                    <div class="flex-1 grid grid-cols-2 gap-x-2 gap-y-3 mb-2">
+                        ${fieldsHtml}
+                    </div>
+                    ${remarkHtml}
+                    
+                    <div class="mt-auto pt-3 border-t border-gray-100">
+                        <div class="flex items-center justify-center">
+                            <span class="text-[11px] font-extrabold px-3 py-1 rounded-full border ${badgeColor}">${tracker}</span>
+                        </div>
+                    </div>
+                </div>`;
             }).join('');
+            lucide.createIcons();
         }
 
         function renderDisciplineTable() {
@@ -2343,16 +2433,174 @@ function renderBlockers() {
             document.getElementById('modal-blocker').classList.add('open');
         }
 
+        // --- MILESTONE CONFIGURATION ---
+        const DEFAULT_MS_SCHEMA = [
+            { key: 'phase', label: 'Activity Name', type: 'text' },
+            { key: 'startDate', label: 'Planned Start', type: 'date' },
+            { key: 'endDate', label: 'Planned End', type: 'date' },
+            { key: 'actualStartDate', label: 'Actual Start', type: 'date' },
+            { key: 'actualEndDate', label: 'Actual End', type: 'date' },
+            { key: 'owner', label: 'Owner', type: 'text' },
+            { key: 'remark', label: 'Remark', type: 'area' }
+        ];
+
+        function ensureMilestoneSchema() {
+            if (!milestoneSchema || milestoneSchema.length === 0) {
+                milestoneSchema = JSON.parse(JSON.stringify(DEFAULT_MS_SCHEMA));
+            } else {
+                // Migration: If schema exists but lacks standard fields (old version), merge them
+                const hasPhase = milestoneSchema.some(f => f.key === 'phase' || f.name === 'Activity Name');
+                if (!hasPhase) {
+                    const oldCustom = milestoneSchema.map(f => ({ key: f.key || f.name, label: f.label || f.name, type: f.type, options: f.options }));
+                    milestoneSchema = [...JSON.parse(JSON.stringify(DEFAULT_MS_SCHEMA)), ...oldCustom];
+                }
+            }
+        }
+
+        function configureMilestones() {
+            ensureMilestoneSchema();
+            const container = document.getElementById('ms-cfg-fields-container');
+            container.innerHTML = '';
+            milestoneSchema.forEach(f => addMilestoneConfigField(f.label, f.type, f.key, f.options));
+            document.getElementById('modal-milestone-config').classList.add('open');
+        }
+
+        function addMilestoneConfigField(label = '', type = 'text', key = '', options = '', insertAfterRow = null) {
+            const div = document.createElement('div');
+            div.className = 'flex flex-col gap-2 mb-2 ms-field-config-row bg-gray-50 p-3 rounded-lg border border-gray-200';
+            div.dataset.key = key; // Store internal key
+            
+            const isSelect = type === 'select';
+
+            div.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <div class="flex flex-col gap-1 mr-1">
+                        <button onclick="moveMsField(this, -1)" class="text-gray-400 hover:text-blue-600 p-0.5" title="Move Up"><i data-lucide="chevron-up" class="w-3 h-3"></i></button>
+                        <button onclick="moveMsField(this, 1)" class="text-gray-400 hover:text-blue-600 p-0.5" title="Move Down"><i data-lucide="chevron-down" class="w-3 h-3"></i></button>
+                    </div>
+                    <div class="flex-1">
+                        <input type="text" class="ms-cfg-field-label w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="Field Label" value="${label}">
+                    </div>
+                    <div class="flex gap-2">
+                        <select class="ms-cfg-field-type border border-gray-300 rounded-md p-2 text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none" onchange="toggleMsFieldOptions(this)">
+                            <option value="text" ${type==='text'?'selected':''}>Text</option>
+                            <option value="date" ${type==='date'?'selected':''}>Date</option>
+                            <option value="number" ${type==='number'?'selected':''}>Number</option>
+                            <option value="area" ${type==='area'?'selected':''}>Text Area</option>
+                            <option value="select" ${type==='select'?'selected':''}>Dropdown</option>
+                        </select>
+                        <button onclick="addMilestoneConfigField('', 'text', '', '', this.closest('.ms-field-config-row'))" class="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded-md transition-colors" title="Insert Field After"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                        <button onclick="this.closest('.ms-field-config-row').remove()" class="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-md transition-colors" title="Remove"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+                <div class="ms-cfg-options-container ${isSelect ? '' : 'hidden'} pl-8">
+                    <input type="text" class="ms-cfg-field-options w-full border border-gray-300 rounded-md p-2 text-xs bg-white" placeholder="Options (comma separated, e.g. High, Medium, Low)" value="${options}">
+                </div>
+            `;
+            
+            const container = document.getElementById('ms-cfg-fields-container');
+            if (insertAfterRow && insertAfterRow.nextSibling) {
+                container.insertBefore(div, insertAfterRow.nextSibling);
+            } else if (insertAfterRow) {
+                container.appendChild(div);
+            } else {
+                container.appendChild(div);
+            }
+            lucide.createIcons();
+        }
+
+        function toggleMsFieldOptions(select) {
+            const row = select.closest('.ms-field-config-row');
+            const optContainer = row.querySelector('.ms-cfg-options-container');
+            if (select.value === 'select') {
+                optContainer.classList.remove('hidden');
+            } else {
+                optContainer.classList.add('hidden');
+            }
+        }
+
+        function moveMsField(btn, dir) {
+            const row = btn.closest('.ms-field-config-row');
+            const container = row.parentElement;
+            if (dir === -1 && row.previousElementSibling) {
+                container.insertBefore(row, row.previousElementSibling);
+            } else if (dir === 1 && row.nextElementSibling) {
+                container.insertBefore(row.nextElementSibling, row);
+            }
+        }
+
+        function saveMilestoneConfig() {
+            const fields = [];
+            const rows = document.querySelectorAll('.ms-field-config-row');
+
+            for (const row of rows) {
+                const label = row.querySelector('.ms-cfg-field-label').value.trim();
+                const type = row.querySelector('.ms-cfg-field-type').value;
+                const options = row.querySelector('.ms-cfg-field-options').value;
+                let key = row.dataset.key;
+
+                if (label) {
+                    if (!key) key = 'custom_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+                    fields.push({ key, label, type, options });
+                }
+            }
+
+            milestoneSchema = fields;
+            closeModal('modal-milestone-config');
+            renderMilestones(); // Re-render to update cards
+            renderSummary();
+        }
+
         // --- COMMON MODAL HANDLERS ---
         function openMilestoneModal(idx = null) {
+            ensureMilestoneSchema();
             const isEdit = idx !== null; document.getElementById('milestone-modal-title').textContent = isEdit ? 'Edit Milestone' : 'Add New';
             document.getElementById('ms-index').value = isEdit ? idx : '';
+            
+            // Render All Fields Dynamically
+            const container = document.getElementById('ms-form-container');
+            container.innerHTML = '';
+            const m = isEdit ? milestones[idx] : {};
+            
+            milestoneSchema.forEach(f => {
+                const div = document.createElement('div');
+                // Fallback for old custom fields where key might be missing or data stored in custom object
+                let val = m[f.key];
+                if (val === undefined && m.custom && m.custom[f.key]) val = m.custom[f.key]; // Legacy support
+                if (val === undefined) val = '';
+
+                let input = `<input type="text" data-ms-key="${f.key}" class="w-full border border-gray-300 rounded-lg p-2" value="${val}">`;
+                if(f.type === 'date') input = `<input type="date" data-ms-key="${f.key}" class="w-full border border-gray-300 rounded-lg p-2" value="${val}">`;
+                if(f.type === 'number') input = `<input type="number" data-ms-key="${f.key}" class="w-full border border-gray-300 rounded-lg p-2" value="${val}">`;
+                if(f.type === 'area') input = `<textarea data-ms-key="${f.key}" class="w-full border border-gray-300 rounded-lg p-2 h-20">${val}</textarea>`;
+                if(f.type === 'select') {
+                    const opts = (f.options || '').split(',').map(s => s.trim()).filter(s => s);
+                    const optionsHtml = opts.map(o => `<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('');
+                    input = `<select data-ms-key="${f.key}" class="w-full border border-gray-300 rounded-lg p-2 bg-white"><option value="">Select...</option>${optionsHtml}</select>`;
+                }
+                
+                div.innerHTML = `<label class="block text-sm font-medium text-gray-700 mb-1">${f.label}</label>${input}`;
+                container.appendChild(div);
+            });
+
             document.getElementById('btn-delete-ms').classList.toggle('hidden', !isEdit);
-            if(isEdit) { const m = milestones[idx]; document.getElementById('ms-phase').value = m.phase; document.getElementById('ms-start').value = m.startDate; document.getElementById('ms-end').value = m.endDate; document.getElementById('ms-act-start').value = m.actualStartDate; document.getElementById('ms-act-end').value = m.actualEndDate; document.getElementById('ms-owner').value = m.owner || ''; document.getElementById('ms-remark').value = m.remark; } 
-            else { ['ms-phase','ms-start','ms-end','ms-act-start','ms-act-end','ms-owner','ms-remark'].forEach(id => document.getElementById(id).value = ''); }
             document.getElementById('modal-milestone').classList.add('open');
         }
-        function saveMilestone() { const idx = document.getElementById('ms-index').value; const item = { phase: document.getElementById('ms-phase').value, startDate: document.getElementById('ms-start').value, endDate: document.getElementById('ms-end').value, actualStartDate: document.getElementById('ms-act-start').value, actualEndDate: document.getElementById('ms-act-end').value, owner: document.getElementById('ms-owner').value, remark: document.getElementById('ms-remark').value }; if(!item.phase) return alert('Activity Name required'); if(idx === '') milestones.push(item); else milestones[idx] = item; closeModal('modal-milestone'); renderMilestones(); }
+        function saveMilestone() { 
+            const idx = document.getElementById('ms-index').value; 
+            const item = {};
+            
+            // Capture all fields
+            const container = document.getElementById('ms-form-container');
+            container.querySelectorAll('[data-ms-key]').forEach(inp => {
+                item[inp.dataset.msKey] = inp.value;
+            });
+
+            if(!item.phase) return alert('Activity Name required'); 
+            if(idx === '') milestones.push(item); else milestones[idx] = item; 
+            closeModal('modal-milestone'); 
+            renderMilestones(); 
+        }
         function deleteMilestone() { const idx = document.getElementById('ms-index').value; if(idx !== '') { milestones.splice(idx, 1); closeModal('modal-milestone'); renderMilestones(); } }
         function openDisciplineModal() { switchDiscTab('L1'); document.getElementById('modal-discipline').classList.add('open'); }
         function switchDiscTab(tab) { discModalTab = tab; document.getElementById('tab-l1-btn').className = `px-4 py-2 text-sm font-medium border-b-2 ${tab==='L1'?'border-teal-600 text-teal-600':'border-transparent text-gray-500'}`; document.getElementById('tab-l2-btn').className = `px-4 py-2 text-sm font-medium border-b-2 ${tab==='L2'?'border-teal-600 text-teal-600':'border-transparent text-gray-500'}`; const content = document.getElementById('disc-tab-content'); if (tab === 'L1') { content.innerHTML = `<table class="min-w-full divide-y divide-gray-200 mb-6"><thead class="bg-gray-50"><tr><th>Discipline</th><th>Total</th><th>Open</th><th>Closed</th><th>Hold</th><th>Grand Total</th></tr></thead><tbody>${taskDisciplines.map((d,i) => `<tr><td class="p-2 font-medium">${d.discipline}</td><td class="p-2"><input type="number" class="w-full border rounded p-1 text-center" value="${d.totalTasks}" oninput="updateL1(${i},'totalTasks',this.value)"></td><td class="p-2"><input type="number" class="w-full border rounded p-1 text-center" value="${d.openTasks}" oninput="updateL1(${i},'openTasks',this.value)"></td><td class="p-2"><input type="number" class="w-full border rounded p-1 text-center" value="${d.closedTasks}" oninput="updateL1(${i},'closedTasks',this.value)"></td><td class="p-2"><input type="number" class="w-full border rounded p-1 text-center" value="${d.holdTasks}" oninput="updateL1(${i},'holdTasks',this.value)"></td><td class="p-2"><input type="number" id="grand-total-${i}" class="w-full border rounded p-1 text-center font-bold bg-gray-100 text-gray-600 cursor-not-allowed" value="${d.grandTotal}" readonly></td></tr>`).join('')}</tbody></table>`; } else { renderL2EditMode(); } }
@@ -2635,10 +2883,20 @@ function renderBlockers() {
 
         function calculateStatus(m) {
             const today = new Date(); today.setHours(0,0,0,0); const toDate = (d) => d ? new Date(d) : null; const planEnd = toDate(m.endDate); const actEnd = toDate(m.actualEndDate); let statusKey = 'pending'; let execLabel = 'YTB'; let execColor = 'text-gray-500 bg-gray-100';
-            if(actEnd) { statusKey = 'completed'; execLabel = 'Completed'; execColor = 'text-green-700 bg-green-100 border-green-200'; } else if(toDate(m.actualStartDate)) { statusKey = 'in-progress'; execLabel = 'In-Progress'; execColor = 'text-blue-700 bg-blue-100 border-blue-200'; }
+            if(actEnd) { statusKey = 'completed'; execLabel = 'Completed'; execColor = 'text-green-700 bg-green-50 border-green-200'; } else if(toDate(m.actualStartDate)) { statusKey = 'in-progress'; execLabel = 'In Progress'; execColor = 'text-blue-700 bg-blue-50 border-blue-200'; }
             let tracker = 'Pending'; let color = 'bg-gray-300'; 
-            if (statusKey === 'completed') { color = 'bg-green-500'; tracker = (actEnd <= planEnd) ? 'On Track' : 'Delayed'; } 
-            else if (statusKey === 'in-progress') { color = 'bg-blue-500'; tracker = (today > planEnd) ? 'Delayed' : 'On Track'; }
+            
+            if (statusKey === 'completed') { 
+                color = 'bg-green-500'; 
+                tracker = 'Completed';
+                if (planEnd && actEnd > planEnd) tracker = 'Done Late';
+            } else if (statusKey === 'in-progress') { 
+                color = 'bg-blue-500'; 
+                tracker = (planEnd && today > planEnd) ? 'Delayed' : 'On Track'; 
+            } else {
+                tracker = (planEnd && today > planEnd) ? 'Delayed' : 'On Track';
+            }
+            
             return { status: statusKey, tracker, color, execLabel, execColor };
         }
 
@@ -2829,6 +3087,7 @@ function renderBlockers() {
             // Executive dashboard state
             const executive = {
                 milestones: wsSafeClone(typeof milestones !== 'undefined' ? milestones : []),
+                milestoneSchema: wsSafeClone(typeof milestoneSchema !== 'undefined' ? milestoneSchema : []),
                 customTrackers: wsSafeClone(typeof customTrackers !== 'undefined' ? customTrackers : []),
                 blockers: wsSafeClone(typeof blockers !== 'undefined' ? blockers : []),
                 kpiData: wsSafeClone(typeof kpiData !== 'undefined' ? kpiData : []),
@@ -2871,6 +3130,7 @@ function renderBlockers() {
                 const hl = state.headless || {};
 
                 if (typeof milestones !== 'undefined') milestones = wsSafeClone(ex.milestones || []);
+                if (typeof milestoneSchema !== 'undefined') milestoneSchema = wsSafeClone(ex.milestoneSchema || []);
                 if (typeof customTrackers !== 'undefined') customTrackers = wsSafeClone(ex.customTrackers || []);
                 if (typeof blockers !== 'undefined') blockers = wsSafeClone(ex.blockers || []);
                 if (typeof kpiData !== 'undefined') kpiData = wsSafeClone(ex.kpiData || []);
@@ -3175,7 +3435,16 @@ function renderBlockers() {
             const head = (state && state.headless) ? state.headless : {};
 
             // Executive sheets
-            addJsonSheet('Milestones', exec.milestones);
+            if (exec.milestones && exec.milestoneSchema && exec.milestoneSchema.length > 0) {
+                const mappedMs = exec.milestones.map(m => {
+                    const row = {};
+                    exec.milestoneSchema.forEach(f => { row[f.label] = m[f.key]; });
+                    return row;
+                });
+                addJsonSheet('Milestones', mappedMs);
+            } else {
+                addJsonSheet('Milestones', exec.milestones);
+            }
             if(exec.customTrackers) exec.customTrackers.forEach(ct => addJsonSheet('Tracker_'+ct.title, ct.items));
             addJsonSheet('Blockers', exec.blockers);
             addJsonSheet('KPIs', exec.kpiData);
@@ -3373,6 +3642,7 @@ function gh6SanitizeState(state) {
     state.executive = state.executive || {};
     state.headless = state.headless || {};
 
+    if (!Array.isArray(state.executive.milestoneSchema)) state.executive.milestoneSchema = [];
     // L2 Detailed Activities shape
     const needL2Object = (!state.executive.l2Data || typeof state.executive.l2Data !== 'object' || Array.isArray(state.executive.l2Data));
     if (needL2Object) {
@@ -3509,6 +3779,7 @@ function gh6BlankState(name) {
 
     // Reset major collections
     st.executive.milestones = [];
+    st.executive.milestoneSchema = [];
     st.executive.customTrackers = [];
     st.executive.blockers = [];
     st.executive.kpiData = [];
