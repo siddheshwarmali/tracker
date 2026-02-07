@@ -586,7 +586,6 @@
 
         m.classList.remove('hidden');
         m.classList.add('flex');
-        recalcHoursPreview();
       }
       function closeTicketModal(){
         const m=qs('ticketModal'); if(!m) return;
@@ -601,16 +600,20 @@
       }
 
       function recalcHoursPreview(){
-        const startInp = document.querySelector('input[data-fid="startAt"]');
-        const endInp = document.querySelector('input[data-fid="endAt"]');
-        const actInp = document.querySelector('input[data-fid="actualTime"]');
+        const container = qs('ticketFormFields');
+        if(!container) return;
+        const startInp = container.querySelector('input[data-fid="startAt"]');
+        const endInp = container.querySelector('input[data-fid="endAt"]');
+        const actInp = container.querySelector('input[data-fid="actualTime"]');
         
         if (!startInp || !endInp || !actInp) return;
         
         const startAt = startInp.value;
         const endAt = endInp.value;
-        const hrs = (startAt && endAt) ? businessHoursDiff(startAt, endAt, {workStart:9, workEnd:18, weekendOff:true}) : 0;
-        actInp.value = Number(hrs||0).toFixed(2);
+        if(startAt && endAt){
+          const hrs = businessHoursDiff(startAt, endAt, {workStart:9, workEnd:18, weekendOff:true});
+          actInp.value = Number(hrs||0).toFixed(2);
+        }
       }
 
       function saveTicketFromModal(){
@@ -624,12 +627,6 @@
             ticket[fid] = inp.value;
         });
         
-        // Auto-calc actualTime if not set manually but dates are present
-        if (ticket.startAt && ticket.endAt) {
-             const hrs = businessHoursDiff(ticket.startAt, ticket.endAt, {workStart:9, workEnd:18, weekendOff:true});
-             ticket.actualTime = hrs;
-        }
-
         if(mode==='edit' && idx!==null && tickets[idx]) tickets[idx] = ticket;
         else tickets.unshift(ticket);
 
@@ -1057,7 +1054,10 @@ async function loadFromWorkspace(id){
         qs('ticketCancel')?.addEventListener('click', closeTicketModal);
         qs('ticketSave')?.addEventListener('click', saveTicketFromModal);
         
-        document.addEventListener('input', (e) => { if(e.target.matches('input[data-fid]')) recalcHoursPreview(); });
+        document.addEventListener('input', (e) => { 
+          if(e.target.matches('input[data-fid="startAt"]') || e.target.matches('input[data-fid="endAt"]')) 
+            recalcHoursPreview(); 
+        });
 
         renderAll();
 
@@ -1196,6 +1196,78 @@ async function loadFromWorkspace(id){
         setTimeout(()=>URL.revokeObjectURL(url), 1000);
       }
 
+      async function wsExportCurrentExcel(){
+        const id = dashId();
+        if(!id){ toast('Select workspace first','error'); return; }
+        if(typeof XLSX === 'undefined'){ toast('SheetJS not loaded','error'); return; }
+        
+        toast('Generating Excel…','info');
+        try{
+          const tickets = window.RunApp ? window.RunApp.getTickets() : [];
+          const cfg = window.runConfig || {};
+          
+          const wb = XLSX.utils.book_new();
+          
+          // 1. Tickets
+          if(tickets.length){
+            const ws = XLSX.utils.json_to_sheet(tickets);
+            XLSX.utils.book_append_sheet(wb, ws, "Tickets");
+          } else {
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{Info:"No tickets"}]), "Tickets");
+          }
+
+          // 2. Summary
+          const grp = cfg.summaryGroupBy || 'type';
+          const slaCfg = cfg.sla || { fieldActual: 'actualTime', fieldThreshold: 'threshold', operator: '<=' };
+          
+          function check(t){
+            const a = Number(t[slaCfg.fieldActual]);
+            const b = Number(t[slaCfg.fieldThreshold]);
+            if(isNaN(a)||isNaN(b)) return false;
+            const op = slaCfg.operator;
+            if(op==='>') return a>b;
+            if(op==='>=') return a>=b;
+            if(op==='<') return a<b;
+            if(op==='==') return a===b;
+            return a<=b;
+          }
+
+          const map={};
+          tickets.forEach(t=>{
+            const k = t[grp]||'Unknown';
+            if(!map[k]) map[k]={Group:k, Total:0, OnTime:0, Breached:0, TimeSum:0};
+            map[k].Total++;
+            map[k].TimeSum += Number(t.actualTime||0);
+            if(check(t)) map[k].OnTime++; else map[k].Breached++;
+          });
+          
+          const sumRows = Object.values(map).map(x=>({
+            Group: x.Group,
+            Total: x.Total,
+            OnTime: x.OnTime,
+            Breached: x.Breached,
+            AvgTime: x.Total ? (x.TimeSum/x.Total).toFixed(2) : '0.00',
+            SLA: x.Total ? ((x.OnTime/x.Total)*100).toFixed(1)+'%' : '0.0%'
+          }));
+          
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sumRows), "Summary");
+
+          // 3. Meta
+          const meta = [
+            {Key:'Workspace', Value:id},
+            {Key:'Date', Value:new Date().toISOString()},
+            {Key:'Tickets', Value:tickets.length}
+          ];
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(meta), "Meta");
+
+          XLSX.writeFile(wb, `Run_${id}_${new Date().toISOString().slice(0,10)}.xlsx`);
+          toast('Exported Excel','ok');
+        }catch(e){
+          console.error(e);
+          toast('Export failed: '+(e.message||String(e)),'error');
+        }
+      }
+
       async function exportWorkspace(){
         const id = dashId();
         if(!id){ toast('Select workspace first','error'); return; }
@@ -1312,6 +1384,7 @@ async function loadFromWorkspace(id){
           if(act==='rename') return renameWorkspace();
           if(act==='save') return window.RunApp?.saveNow?.().catch(err=>toast(err.message||String(err),'error'));
           if(act==='export') return exportWorkspace();
+          if(act==='exportExcel') return wsExportCurrentExcel();
           if(act==='import') return qs('ws-import-file')?.click();
           if(act==='publish') return openPublishModal();
           if(act==='unpublish') return doUnpublish();
@@ -1376,7 +1449,8 @@ async function loadFromWorkspace(id){
               <button data-ws-action="new" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Create New</button>
               <button data-ws-action="rename" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Rename</button>
               <button data-ws-action="save" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Save</button>
-              <button data-ws-action="export" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Export</button>
+              <button data-ws-action="export" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Export (JSON)</button>
+              <button data-ws-action="exportExcel" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Export (Excel)</button>
               <button data-ws-action="import" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Import</button>
               <div class="my-1 border-t"></div>
               <button data-ws-action="publish" class="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-50">Publish</button>
